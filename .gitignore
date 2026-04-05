@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Game saves
+save.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
