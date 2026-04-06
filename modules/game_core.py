@@ -32,6 +32,7 @@ class GameCore:
         self.is_battling = False
         self.auto_battle = False
         self.auto_battle_thread = None
+        self.auto_potion_threshold = 0  # 0=关, 30/50/80=血量百分比阈值
         self.running = True
         self.logs = []
         self.production_active = set()
@@ -602,6 +603,41 @@ class GameCore:
         self.player.heal(heal)
         return True, f"Used potion! Healed {heal} HP"
 
+    def _try_auto_potion(self):
+        """自动药水：血量低于阈值时自动使用/购买药水"""
+        if self.auto_potion_threshold <= 0:
+            return
+        max_hp = self.player.get_max_hp_with_bonus()
+        if max_hp <= 0:
+            return
+        hp_pct = self.player.hp * 100 / max_hp
+        if hp_pct >= self.auto_potion_threshold:
+            return
+
+        # 尝试使用药水
+        if self.player.potions > 0:
+            heal = min(20, max_hp - self.player.hp)
+            if heal > 0:
+                self.player.potions -= 1
+                self.player.heal(heal)
+                self.add_log(f"  💊 Auto-potion! +{heal} HP (remaining: {self.player.potions})")
+            return
+
+        # 没有药水，尝试购买（金币不够就等下一次，绝不关闭自动药水）
+        if self.player.gold >= 25:
+            self.player.gold -= 25
+            self.player.potions += 1
+            self.add_log(f"  💊 Auto-bought potion (25G), using now!")
+            heal = min(20, max_hp - self.player.hp)
+            if heal > 0:
+                self.player.potions -= 1
+                self.player.heal(heal)
+                self.add_log(f"  💊 Auto-potion! +{heal} HP (remaining: {self.player.potions})")
+
+    def set_auto_potion_threshold(self, value):
+        """设置自动药水阈值"""
+        self.auto_potion_threshold = value
+
     def battle(self, enemy_data, is_boss=False):
         """战斗逻辑"""
         if self.is_battling:
@@ -645,6 +681,10 @@ class GameCore:
             e_dmg = max(1, enemy_data["attack"] - self.player.get_total_defense() // 2 + random.randint(-2, 2))
             self.player.take_damage(e_dmg)
             self.add_log(f"  {enemy_data['name']} dealt {e_dmg} damage")
+
+            # 自动药水检查（被攻击后立即判断）
+            self._try_auto_potion()
+
             time.sleep(0.5)
 
         if self.player.hp > 0:

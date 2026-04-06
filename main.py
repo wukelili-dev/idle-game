@@ -266,6 +266,20 @@ class App:
                   bg="#E91E63", fg="white", font=("Arial", 9),
                   relief="groove", padx=8).pack(side="left", padx=4)
 
+        # Auto-potion setting
+        ap_area = ttk.LabelFrame(parent, text="\U0001F9EA Auto Potion", padding=6)
+        ap_area.pack(fill="x", padx=4, pady=3)
+        tk.Label(ap_area, text="When HP < ", font=("Arial", 9)).pack(side="left", padx=2)
+        self.auto_potion_var = tk.StringVar(value="OFF")
+        ap_combo = ttk.Combobox(ap_area, textvariable=self.auto_potion_var,
+                                values=["OFF", "30%", "50%", "80%"],
+                                state="readonly", width=5, font=("Arial", 9))
+        ap_combo.pack(side="left", padx=4)
+        ap_combo.bind("<<ComboboxSelected>>", self._on_auto_potion_change)
+        self.auto_potion_label = tk.Label(ap_area, text="",
+                                          font=("Arial", 8), fg="#888")
+        self.auto_potion_label.pack(side="left", padx=4)
+
     # ── Right: Shop tabs ──
     def _build_right(self, parent):
         nb = ttk.Notebook(parent)
@@ -772,6 +786,28 @@ class App:
         self.game.add_log(msg)
         self.refresh_ui()
 
+    def _on_auto_potion_change(self, event=None):
+        val_str = self.auto_potion_var.get()
+        mapping = {"OFF": 0, "30%": 30, "50%": 50, "80%": 80}
+        val = mapping.get(val_str, 0)
+        self.game.set_auto_potion_threshold(val)
+        if val > 0:
+            self.auto_potion_label.config(text=f"Active ({val}%)", fg="#4CAF50")
+            self.game.add_log(f"Auto-potion ON: HP < {val}%")
+        else:
+            self.auto_potion_label.config(text="Disabled", fg="#999")
+            self.game.add_log("Auto-potion OFF")
+
+    def _restore_auto_potion_ui(self):
+        """读档后恢复自动药水下拉框状态"""
+        t = self.game.auto_potion_threshold
+        rev = {0: "OFF", 30: "30%", 50: "50%", 80: "80%"}
+        self.auto_potion_var.set(rev.get(t, "OFF"))
+        if t > 0:
+            self.auto_potion_label.config(text=f"Active ({t}%)", fg="#4CAF50")
+        else:
+            self.auto_potion_label.config(text="Disabled", fg="#999")
+
     def hire_worker(self, name, idx):
         ok, msg = self.game.hire_worker(name, idx)
         self.game.add_log(msg)
@@ -1004,6 +1040,7 @@ class App:
             "factory_departments": self.game.factory_departments,
             "factory_workers": self.game.factory_workers,
             "factory_last_profit_time": getattr(self.game, "factory_last_profit_time", 0),
+            "auto_potion_threshold": self.game.auto_potion_threshold,
         }
         with open("D:\\pyproject\\hero_workshop\\save.json", "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -1030,6 +1067,7 @@ class App:
         self.game.factory_departments = data.get("factory_departments", ["basic"] if data.get("factory") else [])
         self.game.factory_workers = data.get("factory_workers", 0)
         self.game.factory_last_profit_time = data.get("factory_last_profit_time", 0)
+        self.game.auto_potion_threshold = data.get("auto_potion_threshold", 0)
         for wn in self.game.wonders:
             if wn in self.wonder_buttons:
                 self.wonder_buttons[wn].config(text=f"\u2705 {wn}", state="disabled")
@@ -1037,6 +1075,7 @@ class App:
             for idx in range(len(levels)):
                 self.game.start_building_production(name, idx)
         self.game.add_log("Game loaded!")
+        self._restore_auto_potion_ui()
 
     def show_help(self):
         msg = """Hero Workshop v3.0
