@@ -695,7 +695,7 @@ class App:
 
     # ── Log ──
     def _build_log(self):
-        lf = ttk.LabelFrame(self.root, text="\U0001F4DC Battle Log", padding=4)
+        lf = ttk.LabelFrame(self.root, text="📜 Battle Log", padding=4)
         lf.pack(fill="both", expand=True, padx=4, pady=(2, 2))
 
         sb = ttk.Scrollbar(lf)
@@ -703,9 +703,23 @@ class App:
         self.log_listbox = tk.Listbox(lf, font=("Consolas", 9),
                                       selectbackground="#BBDEFB",
                                       highlightthickness=0,
-                                      yscrollcommand=sb.set)
+                                      yscrollcommand=self._on_log_scroll)
         self.log_listbox.pack(side="left", fill="both", expand=True)
         sb.config(command=self.log_listbox.yview)
+        
+        # 用户手动滚动追踪
+        self._log_user_scrolled = False
+
+    def _on_log_scroll(self, first, last):
+        """滚动条回调 - 追踪用户滚动行为"""
+        # 更新滚动条位置
+        self.log_listbox.yview_moveto(float(first))
+        # 如果用户滚动到底部附近，重置标志，允许自动滚动
+        if float(first) > 0.9:
+            self._log_user_scrolled = False
+        else:
+            # 用户手动滚动到其他位置，设置标志阻止自动滚动
+            self._log_user_scrolled = True
 
     # ──────────────── Actions ────────────────
 
@@ -1044,8 +1058,9 @@ class App:
             self.log_listbox.delete(0, tk.END)
             for log in self.game.logs[-50:]:
                 self.log_listbox.insert(tk.END, log)
-            # 自动滚动到底部（最新日志）
-            self.log_listbox.see(tk.END)
+            # 只有用户没有手动滚动时才自动滚到底部
+            if not self._log_user_scrolled:
+                self.log_listbox.see(tk.END)
             self.refresh_buildings()
             self.refresh_farm_ui()
             self._refresh_factory_ui()
