@@ -31,6 +31,9 @@ class App:
         self.root.resizable(True, True)
 
         self.setup_ui()
+        self._last_building_snap = {}   # {bname: (count, levels_tuple, workers_tuple)}
+        self._last_farm_snap = None     # (len(plants), [(id, stage, remaining, harvest_count), ...])
+        self._last_factory_snap = None  # (tuple(departments), workers, factory_built)
         self.refresh_ui()
         self.update_thread = threading.Thread(target=self.update_loop, daemon=True)
         self.update_thread.start()
@@ -447,19 +450,37 @@ class App:
         """刷新农场 UI（植物状态面板）"""
         if not hasattr(self, "farm_plant_inner"):
             return
+        plants = self.game.plants
+        self.farm_info_lbl.config(text=f"{len(plants)}/{getattr(__import__('modules.plants', fromlist=['MAX_PLANTS']), 'MAX_PLANTS')} plants")
+
+        # 快照：只记录植物数量和各植物关键状态
+        from modules.plants import get_plant_by_id, calc_grow_stage
+        now = time.time()
+        snap_parts = []
+        for plant in plants:
+            pd = get_plant_by_id(plant["plant_id"])
+            if not pd:
+                continue
+            elapsed = now - plant["planted_at"]
+            stage = calc_grow_stage(elapsed, pd["grow_time_s"])
+            snap_parts.append((plant["id"], stage, plant.get("harvest_count", 0)))
+        new_snap = (len(plants), tuple(snap_parts))
+
+        # 阶段变化才重建（生长阶段从0→1→2→3 会触发，但同阶段内不触发）
+        if new_snap == self._last_farm_snap:
+            return
+        self._last_farm_snap = new_snap
+
         # Clear old frames
         for w in self.farm_plant_inner.pack_slaves():
             w.destroy()
 
-        plants = self.game.plants
-        self.farm_info_lbl.config(text=f"{len(plants)}/{getattr(__import__('modules.plants', fromlist=['MAX_PLANTS']), 'MAX_PLANTS')} plants")
-
+        from modules.plants import get_plant_by_id as _get, PLANT_RARITY_COLORS
         if not plants:
             tk.Label(self.farm_plant_inner, text="(no plants yet — buy seeds above)",
                      font=("Arial", 9), fg="#aaa").pack(pady=8)
             return
 
-        from modules.plants import get_plant_by_id, PLANT_RARITY_COLORS
         for plant in plants:
             pd = get_plant_by_id(plant["plant_id"])
             if not pd:
@@ -508,6 +529,17 @@ class App:
         """重建工厂 tab 内容"""
         if not hasattr(self, "factory_body"):
             return
+
+        g = self.game
+        new_snap = (
+            g.factory is not None,
+            tuple(sorted(g.factory_departments)) if g.factory_departments else (),
+            g.factory_workers
+        )
+        if new_snap == self._last_factory_snap:
+            return
+        self._last_factory_snap = new_snap
+
         for w in self.factory_body.pack_slaves():
             w.destroy()
 
@@ -811,6 +843,16 @@ class App:
                     text=f"Avg: {avg_output}/{avg_interval}s | \u26CF{total_workers}/{total_max}")
             else:
                 self.building_widgets[bname]["info"].config(text="Not built")
+
+            # 快照对比：只有结构变化时才重建按钮
+            workers_snap = tuple(
+                self.game.building_workers.get(bname, [0])[i]
+                for i in range(len(levels))
+            )
+            new_snap = (count, tuple(levels), workers_snap)
+            if new_snap == self._last_building_snap.get(bname):
+                continue
+            self._last_building_snap[bname] = new_snap
 
             uf = self.building_widgets[bname]["upgrade_frame"]
             for w in uf.winfo_children():
