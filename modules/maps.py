@@ -102,6 +102,36 @@ def get_map_bosses(map_name):
     return [MAP_ENEMIES[name] for name in map_info.get("bosses", []) if name in MAP_ENEMIES]
 
 
+def get_random_enemy(map_name, boss_chance=0.05):
+    """随机获取一个敌人，有概率遇到BOSS
+    
+    Args:
+        map_name: 地图名称
+        boss_chance: BOSS出现概率，默认5%
+    
+    Returns:
+        (enemy_data, is_boss): 敌人数据和是否为BOSS
+    """
+    import random
+    
+    map_info = MAPS.get(map_name)
+    if not map_info:
+        return None, False
+    
+    # 判断是否遇到BOSS
+    if random.random() < boss_chance:
+        bosses = get_map_bosses(map_name)
+        if bosses:
+            return random.choice(bosses), True
+    
+    # 返回普通怪物
+    enemies = get_map_enemies(map_name)
+    if enemies:
+        return random.choice(enemies), False
+    
+    return None, False
+
+
 def get_enemy_info(enemy_name):
     """获取敌人详细信息"""
     return MAP_ENEMIES.get(enemy_name)

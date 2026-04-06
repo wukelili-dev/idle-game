@@ -645,7 +645,8 @@ class GameCore:
 
         self.is_battling = True
         e_hp = enemy_data["hp"]
-        self.add_log(f"Battle: Hero vs {enemy_data['name']}")
+        boss_tag = " [BOSS]" if is_boss else ""
+        self.add_log(f"Battle: Hero vs {enemy_data['name']}{boss_tag}")
 
         while e_hp > 0 and self.player.hp > 0:
             # 玩家攻击
@@ -745,20 +746,11 @@ class GameCore:
         """自动战斗循环"""
         while self.auto_battle and self.running:
             if not self.is_battling:
-                # 每次从当前地图获取敌人
-                enemies = self.get_current_map_enemies()
-                if enemies and self.current_enemy_idx < len(enemies):
-                    enemy = enemies[self.current_enemy_idx]
-                    result, msg = self.battle(enemy)
-                    
-                    # 战斗胜利后推进敌人索引
-                    if result:
-                        if self.current_enemy_idx < len(enemies) - 1:
-                            self.current_enemy_idx += 1
-                        else:
-                            self.current_enemy_idx = 0
-                            self.add_log("Enemy list reset!")
-                    
+                # 随机获取敌人，有5%概率遇到BOSS
+                from .maps import get_random_enemy
+                enemy, is_boss = get_random_enemy(self.current_map)
+                if enemy:
+                    result, msg = self.battle(enemy, is_boss=is_boss)
                     self.is_battling = False
                 else:
                     self.add_log("No enemies available!")
