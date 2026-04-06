@@ -759,11 +759,14 @@ class App:
         if self.game.is_battling:
             self.game.add_log("战斗中无法刷新!")
             return
-        enemy, is_boss, msg = self.game.refresh_enemy()
+        from modules.maps import get_random_enemy
+        enemy, is_boss = get_random_enemy(self.game.current_map)
         if enemy:
-            # 更新当前敌人显示
+            self.game.current_enemy = enemy
+            self.game.current_enemy_is_boss = is_boss
             boss_tag = " [BOSS]" if is_boss else ""
             self.enemy_var.set(f"{enemy['name']}{boss_tag}  HP:{enemy['hp']}  ATK:{enemy['attack']}")
+            self.game.add_log(f"🔄 刷新敌人: {enemy['name']}{boss_tag}")
 
     def do_battle(self):
         if self.game.is_battling:
@@ -774,6 +777,9 @@ class App:
         if not enemy:
             self.game.add_log("No enemies!")
             return
+        # 保存当前敌人信息
+        self.game.current_enemy = enemy
+        self.game.current_enemy_is_boss = is_boss
         t = threading.Thread(target=self._battle_wrapper, args=(enemy, is_boss), daemon=True)
         t.start()
 
@@ -975,10 +981,11 @@ class App:
                     btn.config(bg="#BDBDBD", fg="#333", text=f"{mn}({cost}G)")
 
             # Enemy
-            enemies = self.game.get_current_map_enemies()
-            if enemies and self.game.current_enemy_idx < len(enemies):
-                e = enemies[self.game.current_enemy_idx]
-                self.enemy_var.set(f"{e['name']}  HP:{e['hp']}  ATK:{e['attack']}")
+            enemy = self.game.current_enemy
+            is_boss = self.game.current_enemy_is_boss
+            if enemy:
+                boss_tag = " [BOSS]" if is_boss else ""
+                self.enemy_var.set(f"{enemy['name']}{boss_tag}  HP:{enemy['hp']}  ATK:{enemy['attack']}")
             else:
                 self.enemy_var.set("No enemy")
 
@@ -1037,7 +1044,16 @@ class App:
             self.log_listbox.delete(0, tk.END)
             for log in self.game.logs[-50:]:
                 self.log_listbox.insert(tk.END, log)
-            self.log_listbox.yview_moveto(1)
+            # 只有当滚动条在底部附近时才自动滚动到底部
+            # 用户手动滚动后保持位置
+            try:
+                # 获取当前滚动位置 (0=顶部, 1=底部)
+                current_pos = self.log_listbox.yview()[0]
+                # 如果当前位置在底部附近(>0.9)，则自动滚动
+                if current_pos > 0.9:
+                    self.log_listbox.yview_moveto(1)
+            except:
+                self.log_listbox.yview_moveto(1)
             self.refresh_buildings()
             self.refresh_farm_ui()
             self._refresh_factory_ui()

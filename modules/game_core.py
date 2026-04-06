@@ -29,6 +29,8 @@ class GameCore:
         self.current_map = "傲来国"  # 初始地图
         self.unlocked_maps = {"傲来国"}  # 已解锁地图
         self.current_enemy_idx = 0
+        self.current_enemy = None  # 当前敌人信息
+        self.current_enemy_is_boss = False  # 当前敌人是否为BOSS
         self.is_battling = False
         self.auto_battle = False
         self.auto_battle_thread = None
@@ -725,11 +727,19 @@ class GameCore:
             msgs = self.player.gain_exp(enemy_data["exp"])
             for m in msgs:
                 self.add_log(m)
+            # 战斗胜利后获取下一个敌人
+            next_enemy, next_is_boss = get_random_enemy(self.current_map)
+            self.current_enemy = next_enemy
+            self.current_enemy_is_boss = next_is_boss
             return True, "Victory"
         else:
             self.add_log(f"Defeated by {enemy_data['name']}!")
             self.player.hp = self.player.get_max_hp_with_bonus() // 2
             self.add_log(f"Recovered: {self.player.hp}/{self.player.get_max_hp_with_bonus()}")
+            # 战斗失败后也获取新敌人
+            next_enemy, next_is_boss = get_random_enemy(self.current_map)
+            self.current_enemy = next_enemy
+            self.current_enemy_is_boss = next_is_boss
             return False, "Defeat"
 
     def start_auto_battle(self):
