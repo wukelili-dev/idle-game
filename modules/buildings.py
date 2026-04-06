@@ -7,7 +7,7 @@ MAX_BUILDING_COUNT = 3
 
 # 劳工配置
 WORKER_CONFIG = {
-    "hire_cost": {"Gold": 50},  # 雇佣成本
+    "hire_cost": {"金币": 50},  # 雇佣成本
     "output_bonus": 0.5,  # 每个劳工增加50%产量
     "wage": 5,  # 每个劳工每周期工资（金币）
     "wage_interval": 60,  # 工资支付间隔（秒）
@@ -28,7 +28,7 @@ class BuildingConfig:
         self.base_interval = base_interval
         self.base_output = base_output
         self.build_cost = build_cost
-        self.worker_cost = worker_cost or {"Gold": 50}  # 雇佣劳工成本
+        self.worker_cost = worker_cost or {"金币": 50}  # 雇佣劳工成本
 
     def get_interval(self, level):
         """根据等级获取生产间隔"""
@@ -45,7 +45,7 @@ class BuildingConfig:
         """获取升级成本"""
         gold = int(20 * (level ** 1.5))
         wood = int(15 * (level ** 1.3))
-        return {"Gold": gold, "Wood": wood}
+        return {"金币": gold, "木材": wood}
 
     def get_max_workers(self, level):
         """获取该等级下最大劳工数"""
@@ -59,18 +59,18 @@ class BuildingConfig:
 
 # 建筑配置
 BUILDING_CONFIGS = {
-    "LumberMill": BuildingConfig( "LumberMill", 3, 1, {"Gold": 10}),
-    "IronMine": BuildingConfig("IronMine", 5, 1, {"Wood": 10}),
-    "HuntingGround": BuildingConfig("HuntingGround", 4, 1, {"Wood": 10, "Iron": 5}),
-    "Quarry": BuildingConfig("Quarry", 6, 1, {"Gold": 15, "Wood": 20}),  # 采石场
+    "伐木场": BuildingConfig( "伐木场", 3, 1, {"金币": 10}),
+    "铁矿": BuildingConfig("铁矿", 5, 1, {"木材": 10}),
+    "狩猎场": BuildingConfig("狩猎场", 4, 1, {"木材": 10, "铁矿": 5}),
+    "采石场": BuildingConfig("采石场", 6, 1, {"金币": 15, "木材": 20}),  # 采石场
 }
 
 # 建筑产出资源映射
 BUILDING_OUTPUTS = {
-    "LumberMill": "Wood",
-    "IronMine": "Iron",
-    "HuntingGround": "Leather",
-    "Quarry": "Stone",  # 采石场产出石头
+    "伐木场": "木材",
+    "铁矿": "铁矿",
+    "狩猎场": "皮革",
+    "采石场": "石头",  # 采石场产出石头
 }
 
 
@@ -88,17 +88,17 @@ WONDERS = {
     "天空之城": WonderConfig(
         "天空之城",
         "传说中的浮空城市，象征着无上的荣耀",
-        {"Gold": 10000, "Wood": 5000, "Iron": 3000, "Stone": 2000, "Leather": 1000}
+        {"金币": 10000, "木材": 5000, "铁矿": 3000, "石头": 2000, "皮革": 1000}
     ),
     "永恒熔炉": WonderConfig(
         "永恒熔炉",
         "永不熄灭的熔炉，工匠们的终极梦想",
-        {"Gold": 8000, "Wood": 3000, "Iron": 5000, "Stone": 3000}
+        {"金币": 8000, "木材": 3000, "铁矿": 5000, "石头": 3000}
     ),
     "生命之树": WonderConfig(
         "生命之树",
         "古老的神树，据说能带来好运",
-        {"Gold": 6000, "Wood": 6000, "Iron": 2000, "Stone": 2000, "Leather": 2000}
+        {"金币": 6000, "木材": 6000, "铁矿": 2000, "石头": 2000, "皮革": 2000}
     ),
 }
 
@@ -115,7 +115,7 @@ def get_all_building_names():
 
 def get_building_output_resource(name):
     """获取建筑产出的资源类型"""
-    return BUILDING_OUTPUTS.get(name, "Wood")
+    return BUILDING_OUTPUTS.get(name, "木材")
 
 
 def get_building_cost(name):

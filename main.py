@@ -123,8 +123,8 @@ class App:
         rf.pack(fill="x", padx=4, pady=(6, 3))
         self.res_labels = {}
         self.res_buy_entries = {}
-        MATERIALS = [("Wood", "\U0001F332", 4), ("Iron", "\u2692", 6), 
-                     ("Leather", "\U0001F9B4", 4), ("Stone", "\u26F0", 2)]
+        MATERIALS = [("木材", "\U0001F332", 4), ("铁矿", "\u2692", 6), 
+                     ("皮革", "\U0001F9B4", 4), ("石头", "\u26F0", 2)]
         for res, emoji, buy_price in MATERIALS:
             row = tk.Frame(rf)
             row.pack(fill="x", pady=2)
@@ -135,10 +135,10 @@ class App:
             self.res_labels[res].pack(side="left")
             
             # 购买/出售 buttons
-            tk.Button(row, text="B", font=("Arial", 7), bg="#4CAF50", fg="white",
+            tk.Button(row, text="买", font=("Arial", 7), bg="#4CAF50", fg="white",
                       width=2, relief="raised",
                       command=lambda r=res: self.buy_material(r)).pack(side="left", padx=1)
-            tk.Button(row, text="S", font=("Arial", 7), bg="#FF9800", fg="white",
+            tk.Button(row, text="卖", font=("Arial", 7), bg="#FF9800", fg="white",
                       width=2, relief="raised",
                       command=lambda r=res: self.sell_material(r)).pack(side="left", padx=1)
             self.res_buy_entries[res] = tk.Entry(row, width=3, font=("Arial", 8))
@@ -350,7 +350,7 @@ class App:
     def _cost_str(cost):
         if not cost:
             return "Free"
-        m = {"Gold": "G", "Wood": "W", "Iron": "I", "Leather": "L", "Stone": "S"}
+        m = {"金币": "金", "木材": "木", "铁矿": "铁", "皮革": "皮", "石头": "石"}
         return " ".join(f"{m.get(k, k)}{v}" for k, v in cost.items())
 
     # ── Novelty Shop ──
@@ -682,7 +682,7 @@ class App:
                            command=lambda idx=i: self.equip_item(idx))
             btn_e.pack(side="left", padx=1)
             
-            btn_s = tk.Button(cell, text="S", font=("Arial", 8, "bold"),
+            btn_s = tk.Button(cell, text="卖", font=("Arial", 8, "bold"),
                            bg="#FF9800", fg="white", relief="raised", width=2, height=1,
                            command=lambda idx=i: self.sell_item(idx))
             btn_s.pack(side="left", padx=1)
@@ -1101,7 +1101,7 @@ class App:
             return
         with open(save_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        self.game.resources = data.get("resources", {"Wood": 0, "Iron": 0, "Leather": 0, "Stone": 0})
+        self.game.resources = data.get("resources", {"木材": 0, "铁矿": 0, "皮革": 0, "石头": 0})
         self.game.buildings = data.get("buildings", {})
         self.game.building_levels = data.get("building_levels", {})
         self.game.building_workers = data.get("building_workers", {})

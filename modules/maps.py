@@ -41,33 +41,33 @@ MAPS = {
 # 怪物数据（按地图分布）
 MAP_ENEMIES = {
     # 傲来国 - 新手村 (Lv.1-10)
-    "蝴蝶": {"name": "蝴蝶", "hp": 15, "attack": 3, "defense": 1, "exp": 5, "gold": 3, "drops": {"Leather": 1}},
-    "鹦鹉": {"name": "鹦鹉", "hp": 25, "attack": 5, "defense": 2, "exp": 8, "gold": 5, "drops": {"Leather": 1}},
-    "龙虾": {"name": "龙虾", "hp": 40, "attack": 8, "defense": 3, "exp": 15, "gold": 10, "drops": {"Leather": 2}},
-    "巨蟹": {"name": "巨蟹", "hp": 60, "attack": 12, "defense": 5, "exp": 25, "gold": 18, "drops": {"Leather": 2, "Iron": 1}},
-    "九头精怪": {"name": "九头精怪", "hp": 150, "attack": 20, "defense": 10, "exp": 80, "gold": 60, "drops": {"Leather": 5, "Iron": 3, "Wood": 5}},
+    "蝴蝶": {"name": "蝴蝶", "hp": 15, "attack": 3, "defense": 1, "exp": 5, "gold": 3, "drops": {"皮革": 1}},
+    "鹦鹉": {"name": "鹦鹉", "hp": 25, "attack": 5, "defense": 2, "exp": 8, "gold": 5, "drops": {"皮革": 1}},
+    "龙虾": {"name": "龙虾", "hp": 40, "attack": 8, "defense": 3, "exp": 15, "gold": 10, "drops": {"皮革": 2}},
+    "巨蟹": {"name": "巨蟹", "hp": 60, "attack": 12, "defense": 5, "exp": 25, "gold": 18, "drops": {"皮革": 2, "铁矿": 1}},
+    "九头精怪": {"name": "九头精怪", "hp": 150, "attack": 20, "defense": 10, "exp": 80, "gold": 60, "drops": {"皮革": 5, "铁矿": 3, "木材": 5}},
     
     # 大唐东 (Lv.11-15)
-    "失控的银甲唐兵": {"name": "失控的银甲唐兵", "hp": 80, "attack": 15, "defense": 8, "exp": 35, "gold": 25, "drops": {"Iron": 2}},
-    "太监": {"name": "太监", "hp": 60, "attack": 12, "defense": 5, "exp": 28, "gold": 20, "drops": {"Leather": 2}},
-    "失控的金甲唐兵": {"name": "失控的金甲唐兵", "hp": 100, "attack": 18, "defense": 12, "exp": 45, "gold": 35, "drops": {"Iron": 3}},
-    "唐兵统领": {"name": "唐兵统领", "hp": 130, "attack": 22, "defense": 15, "exp": 60, "gold": 50, "drops": {"Iron": 4, "Leather": 2}},
-    "千年蛇魅": {"name": "千年蛇魅", "hp": 250, "attack": 30, "defense": 18, "exp": 120, "gold": 100, "drops": {"Leather": 8, "Iron": 5, "Wood": 3}},
+    "失控的银甲唐兵": {"name": "失控的银甲唐兵", "hp": 80, "attack": 15, "defense": 8, "exp": 35, "gold": 25, "drops": {"铁矿": 2}},
+    "太监": {"name": "太监", "hp": 60, "attack": 12, "defense": 5, "exp": 28, "gold": 20, "drops": {"皮革": 2}},
+    "失控的金甲唐兵": {"name": "失控的金甲唐兵", "hp": 100, "attack": 18, "defense": 12, "exp": 45, "gold": 35, "drops": {"铁矿": 3}},
+    "唐兵统领": {"name": "唐兵统领", "hp": 130, "attack": 22, "defense": 15, "exp": 60, "gold": 50, "drops": {"铁矿": 4, "皮革": 2}},
+    "千年蛇魅": {"name": "千年蛇魅", "hp": 250, "attack": 30, "defense": 18, "exp": 120, "gold": 100, "drops": {"皮革": 8, "铁矿": 5, "木材": 3}},
     
     # 阳关 (Lv.15-20)
-    "突厥弩手": {"name": "突厥弩手", "hp": 120, "attack": 25, "defense": 10, "exp": 55, "gold": 40, "drops": {"Wood": 3, "Iron": 2}},
-    "波斯女刀客": {"name": "波斯女刀客", "hp": 140, "attack": 28, "defense": 12, "exp": 65, "gold": 50, "drops": {"Leather": 3, "Iron": 3}},
-    "突厥弩王": {"name": "突厥弩王", "hp": 280, "attack": 35, "defense": 20, "exp": 150, "gold": 120, "drops": {"Wood": 6, "Iron": 5, "Leather": 4}},
-    "波斯刺客": {"name": "波斯刺客", "hp": 220, "attack": 40, "defense": 15, "exp": 130, "gold": 110, "drops": {"Leather": 6, "Iron": 4}},
+    "突厥弩手": {"name": "突厥弩手", "hp": 120, "attack": 25, "defense": 10, "exp": 55, "gold": 40, "drops": {"木材": 3, "铁矿": 2}},
+    "波斯女刀客": {"name": "波斯女刀客", "hp": 140, "attack": 28, "defense": 12, "exp": 65, "gold": 50, "drops": {"皮革": 3, "铁矿": 3}},
+    "突厥弩王": {"name": "突厥弩王", "hp": 280, "attack": 35, "defense": 20, "exp": 150, "gold": 120, "drops": {"木材": 6, "铁矿": 5, "皮革": 4}},
+    "波斯刺客": {"name": "波斯刺客", "hp": 220, "attack": 40, "defense": 15, "exp": 130, "gold": 110, "drops": {"皮革": 6, "铁矿": 4}},
     
     # 东海 (Lv.20-30)
-    "巡海夜叉": {"name": "巡海夜叉", "hp": 180, "attack": 35, "defense": 18, "exp": 90, "gold": 70, "drops": {"Leather": 4, "Iron": 3}},
-    "龟丞相": {"name": "龟丞相", "hp": 250, "attack": 30, "defense": 30, "exp": 110, "gold": 90, "drops": {"Leather": 5, "Wood": 4}},
-    "螺精": {"name": "螺精", "hp": 200, "attack": 38, "defense": 15, "exp": 100, "gold": 80, "drops": {"Leather": 3, "Wood": 3}},
-    "万年虾妖": {"name": "万年虾妖", "hp": 400, "attack": 45, "defense": 25, "exp": 200, "gold": 180, "drops": {"Leather": 8, "Iron": 6}},
-    "梵天罗刹": {"name": "梵天罗刹", "hp": 450, "attack": 50, "defense": 22, "exp": 220, "gold": 200, "drops": {"Leather": 10, "Iron": 5, "Wood": 5}},
-    "玄龟仙人": {"name": "玄龟仙人", "hp": 500, "attack": 42, "defense": 40, "exp": 250, "gold": 220, "drops": {"Leather": 8, "Wood": 8}},
-    "嗜血妖螺": {"name": "嗜血妖螺", "hp": 380, "attack": 55, "defense": 20, "exp": 210, "gold": 190, "drops": {"Leather": 6, "Iron": 8}},
+    "巡海夜叉": {"name": "巡海夜叉", "hp": 180, "attack": 35, "defense": 18, "exp": 90, "gold": 70, "drops": {"皮革": 4, "铁矿": 3}},
+    "龟丞相": {"name": "龟丞相", "hp": 250, "attack": 30, "defense": 30, "exp": 110, "gold": 90, "drops": {"皮革": 5, "木材": 4}},
+    "螺精": {"name": "螺精", "hp": 200, "attack": 38, "defense": 15, "exp": 100, "gold": 80, "drops": {"皮革": 3, "木材": 3}},
+    "万年虾妖": {"name": "万年虾妖", "hp": 400, "attack": 45, "defense": 25, "exp": 200, "gold": 180, "drops": {"皮革": 8, "铁矿": 6}},
+    "梵天罗刹": {"name": "梵天罗刹", "hp": 450, "attack": 50, "defense": 22, "exp": 220, "gold": 200, "drops": {"皮革": 10, "铁矿": 5, "木材": 5}},
+    "玄龟仙人": {"name": "玄龟仙人", "hp": 500, "attack": 42, "defense": 40, "exp": 250, "gold": 220, "drops": {"皮革": 8, "木材": 8}},
+    "嗜血妖螺": {"name": "嗜血妖螺", "hp": 380, "attack": 55, "defense": 20, "exp": 210, "gold": 190, "drops": {"皮革": 6, "铁矿": 8}},
 }
 
 

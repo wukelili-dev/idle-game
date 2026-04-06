@@ -21,7 +21,7 @@ from .factory import (FACTORY_BUILD_COST, FACTORY_BASE_INTERVAL_S,
 class GameCore:
     """游戏核心类"""
     def __init__(self):
-        self.resources = {"Wood": 0, "Iron": 0, "Leather": 0, "Stone": 0}  # 新增石头资源
+        self.resources = {"木材": 0, "铁矿": 0, "皮革": 0, "石头": 0}  # 新增石头资源
         self.buildings = {}  # 建筑数量
         self.building_levels = {}  # 建筑等级列表
         self.building_workers = {}  # 建筑劳工数量 {name: [count, count, ...]}
@@ -395,7 +395,7 @@ class GameCore:
         cost = config.get_upgrade_cost(new_level)
 
         if not self.can_afford(cost):
-            return False, f"Not enough! Need G{cost.get('金币',0)} W{cost.get('Wood',0)}"
+            return False, f"Not enough! Need G{cost.get('金币',0)} W{cost.get('木材',0)}"
 
         self.spend_resources(cost)
         self.building_levels[name][idx] = new_level
@@ -810,11 +810,11 @@ class GameCore:
         """计算商店装备售价（80%）"""
         # 只计算金币成本，其他资源按比例转换
         gold_value = cost.get("金币", 0)
-        # Wood=2G, Iron=3G, Leather=2G, Stone=1G
-        gold_value += cost.get("Wood", 0) * 2
-        gold_value += cost.get("Iron", 0) * 3
-        gold_value += cost.get("Leather", 0) * 2
-        gold_value += cost.get("Stone", 0) * 1
+        # 木材=2G, 铁矿=3G, 皮革=2G, 石头=1G
+        gold_value += cost.get("木材", 0) * 2
+        gold_value += cost.get("铁矿", 0) * 3
+        gold_value += cost.get("皮革", 0) * 2
+        gold_value += cost.get("石头", 0) * 1
         return int(gold_value * 0.8)
 
     def _calc_drop_sell_price(self, equip):
@@ -865,10 +865,10 @@ class GameCore:
 
     # ── Material Trading ──
     MATERIAL_PRICES = {
-        "Wood": {"sell": 2, "buy": 4},
-        "Iron": {"sell": 3, "buy": 6},
-        "Leather": {"sell": 2, "buy": 4},
-        "Stone": {"sell": 1, "buy": 2},
+        "木材": {"sell": 2, "buy": 4},
+        "铁矿": {"sell": 3, "buy": 6},
+        "皮革": {"sell": 2, "buy": 4},
+        "石头": {"sell": 1, "buy": 2},
     }
 
     def buy_material(self, material, amount):
