@@ -703,23 +703,9 @@ class App:
         self.log_listbox = tk.Listbox(lf, font=("Consolas", 9),
                                       selectbackground="#BBDEFB",
                                       highlightthickness=0,
-                                      yscrollcommand=self._on_log_scroll)
+                                      yscrollcommand=sb.set)
         self.log_listbox.pack(side="left", fill="both", expand=True)
         sb.config(command=self.log_listbox.yview)
-        
-        # 用户手动滚动追踪
-        self._log_user_scrolled = False
-
-    def _on_log_scroll(self, first, last):
-        """滚动条回调 - 追踪用户滚动行为"""
-        # 更新滚动条位置
-        self.log_listbox.yview_moveto(float(first))
-        # 如果用户滚动到底部附近，重置标志，允许自动滚动
-        if float(first) > 0.9:
-            self._log_user_scrolled = False
-        else:
-            # 用户手动滚动到其他位置，设置标志阻止自动滚动
-            self._log_user_scrolled = True
 
     # ──────────────── Actions ────────────────
 
@@ -1054,13 +1040,25 @@ class App:
                     slot["btn_e"].config(state="disabled", bg="#BDBDBD", activebackground="#BDBDBD")
                     slot["btn_s"].config(state="disabled", bg="#BDBDBD", activebackground="#BDBDBD")
 
-            # Log
+            # Log - 保存当前位置，刷新后恢复
+            was_at_bottom = False
+            try:
+                pos = self.log_listbox.yview()
+                # 判断是否在底部附近
+                was_at_bottom = (pos[1] - pos[0]) < 1.1 or pos[0] > 0.9
+                saved_pos = pos[0]
+            except:
+                was_at_bottom = True
+                saved_pos = 0
+            
             self.log_listbox.delete(0, tk.END)
             for log in self.game.logs[-50:]:
                 self.log_listbox.insert(tk.END, log)
-            # 只有用户没有手动滚动时才自动滚到底部
-            if not self._log_user_scrolled:
+            
+            if was_at_bottom:
                 self.log_listbox.see(tk.END)
+            else:
+                self.log_listbox.yview_moveto(saved_pos)
             self.refresh_buildings()
             self.refresh_farm_ui()
             self._refresh_factory_ui()
