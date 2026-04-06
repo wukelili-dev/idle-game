@@ -7,7 +7,7 @@ import random
 from .hero import Hero
 from .buildings import (get_building_config, get_building_output_resource, 
                         MAX_BUILDING_COUNT, WORKER_CONFIG, get_wonder_config)
-from .maps import get_map_enemies, get_all_maps, can_enter_map, get_unlock_cost
+from .maps import get_map_enemies, get_all_maps, can_enter_map, get_unlock_cost, get_random_enemy
 from .equipment_drops import generate_drop, get_drop_summary
 from .inventory import NOVELTY_ITEMS
 from .plants import (get_plant_catalog, get_plant_by_id, calc_grow_stage,
@@ -785,6 +785,16 @@ class GameCore:
     def get_current_map_enemies(self):
         """获取当前地图的敌人列表"""
         return get_map_enemies(self.current_map)
+
+    def refresh_enemy(self):
+        """刷新当前敌人（随机获取新敌人，有概率遇到BOSS）"""
+        if self.is_battling:
+            return None, False, "战斗中无法刷新"
+        enemy, is_boss = get_random_enemy(self.current_map)
+        if enemy:
+            boss_tag = " [BOSS]" if is_boss else ""
+            self.add_log(f"🔄 刷新敌人: {enemy['name']}{boss_tag}")
+        return enemy, is_boss, "已刷新敌人"
 
     def _calc_shop_sell_price(self, cost):
         """计算商店装备售价（80%）"""

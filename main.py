@@ -227,12 +227,19 @@ class App:
             self.map_buttons[mn] = btn
 
         # Enemy
-        ef = ttk.LabelFrame(parent, text="\U0001F480 Enemy", padding=8)
+        ef = ttk.LabelFrame(parent, text="💀 Enemy", padding=8)
         ef.pack(fill="x", padx=4, pady=3)
 
         self.enemy_var = tk.StringVar(value="???")
         tk.Label(ef, textvariable=self.enemy_var, font=("Arial", 11, "bold"),
                  fg="#C62828").pack(pady=2)
+        
+        # 刷新敌人按钮
+        self.refresh_btn = tk.Button(ef, text="🔄 刷新敌人",
+                                     command=self.do_refresh_enemy,
+                                     font=("Arial", 9), bg="#9E9E9E",
+                                     fg="white", relief="groove", width=12)
+        self.refresh_btn.pack(pady=2)
 
         # Battle buttons
         btn_area = tk.Frame(parent)
@@ -747,30 +754,33 @@ class App:
             else:
                 self.game.add_log(f"Cannot unlock: {msg}")
 
+    def do_refresh_enemy(self):
+        """刷新当前敌人"""
+        if self.game.is_battling:
+            self.game.add_log("战斗中无法刷新!")
+            return
+        enemy, is_boss, msg = self.game.refresh_enemy()
+        if enemy:
+            # 更新当前敌人显示
+            boss_tag = " [BOSS]" if is_boss else ""
+            self.enemy_var.set(f"{enemy['name']}{boss_tag}  HP:{enemy['hp']}  ATK:{enemy['attack']}")
+
     def do_battle(self):
         if self.game.is_battling:
             return
-        enemies = self.game.get_current_map_enemies()
-        if not enemies:
+        # 随机获取敌人，有5%概率遇到BOSS
+        from modules.maps import get_random_enemy
+        enemy, is_boss = get_random_enemy(self.game.current_map)
+        if not enemy:
             self.game.add_log("No enemies!")
             return
-        if self.game.current_enemy_idx >= len(enemies):
-            self.game.current_enemy_idx = 0
-        enemy = enemies[self.game.current_enemy_idx]
-        t = threading.Thread(target=self._battle_wrapper, args=(enemy,), daemon=True)
+        t = threading.Thread(target=self._battle_wrapper, args=(enemy, is_boss), daemon=True)
         t.start()
 
-    def _battle_wrapper(self, enemy):
+    def _battle_wrapper(self, enemy, is_boss=False):
         self.root.after(0, lambda: self.battle_btn.config(state="disabled"))
         try:
-            result, msg = self.game.battle(enemy)
-            enemies = self.game.get_current_map_enemies()
-            if result:
-                if self.game.current_enemy_idx < len(enemies) - 1:
-                    self.game.current_enemy_idx += 1
-                else:
-                    self.game.current_enemy_idx = 0
-                    self.game.add_log("Enemy reset!")
+            result, msg = self.game.battle(enemy, is_boss=is_boss)
         except Exception as e:
             self.game.add_log(f"Battle error: {e}")
         finally:
