@@ -541,79 +541,90 @@ class App:
 
     def _refresh_factory_ui(self):
         """重建工厂 tab 内容"""
-        if not hasattr(self, "factory_body"):
-            return
+        try:
+            if not hasattr(self, "factory_body"):
+                return
 
-        g = self.game
-        new_snap = (
-            g.factory is not None,
-            tuple(sorted(g.factory_departments)) if g.factory_departments else (),
-            g.factory_workers
-        )
-        if new_snap == self._last_factory_snap:
-            return
-        self._last_factory_snap = new_snap
+            g = self.game
+            new_snap = (
+                g.factory is not None,
+                tuple(sorted(g.factory_departments)) if g.factory_departments else (),
+                g.factory_workers
+            )
+            if new_snap == self._last_factory_snap:
+                return
+            self._last_factory_snap = new_snap
 
-        for w in self.factory_body.pack_slaves():
-            w.destroy()
+            for w in self.factory_body.pack_slaves():
+                w.destroy()
 
-        from modules.factory import FACTORY_BUILD_COST, FACTORY_WORKER_COST_GOLD, DEPARTMENTS, MAX_FACTORY_WORKERS, get_dept_by_id, calc_factory_bonus
+            from modules.factory import FACTORY_BUILD_COST, FACTORY_WORKER_COST_GOLD, DEPARTMENTS, MAX_FACTORY_WORKERS, get_dept_by_id, calc_factory_bonus
 
-        g = self.game
+            g = self.game
 
-        if g.factory is None:
-            # 建造按钮
-            tk.Label(self.factory_body, text="Factory not yet built!",
-                     font=("Arial", 10), fg="#888").pack(pady=8)
-            cost_str = " ".join(f"{k}{v}" for k, v in FACTORY_BUILD_COST.items())
-            tk.Label(self.factory_body, text=f"Cost: {cost_str}",
-                     font=("Consolas", 9), fg="#555").pack()
-            tk.Button(self.factory_body, text="🏗️ Build Factory",
-                      font=("Arial", 11, "bold"), bg="#1976D2", fg="white",
-                      relief="groove", command=self._build_factory).pack(pady=8)
-            return
+            if g.factory is None:
+                # 建造按钮
+                tk.Label(self.factory_body, text="Factory not yet built!",
+                         font=("Arial", 10), fg="#888").pack(pady=8)
+                cost_str = " ".join(f"{k}{v}" for k, v in FACTORY_BUILD_COST.items())
+                tk.Label(self.factory_body, text=f"Cost: {cost_str}",
+                         font=("Consolas", 9), fg="#555").pack()
+                tk.Button(self.factory_body, text="🏗️ Build Factory",
+                          font=("Arial", 11, "bold"), bg="#1976D2", fg="white",
+                          relief="groove", command=self._build_factory).pack(pady=8)
+                return
 
-        # 工厂已建造
-        finfo = g.get_factory_info()
-        self.factory_status_lbl.config(
-            text=f"Profit: {finfo['profit_per_cycle']}G / {finfo['cycle_seconds']}s  ×{finfo['bonus_factor']:.2f}",
-            fg="#2E7D32")
+            # 工厂已建造
+            finfo = g.get_factory_info()
+            self.factory_status_lbl.config(
+                text=f"Profit: {finfo['profit_per_cycle']}G / {finfo['cycle_seconds']}s  ×{finfo['bonus_factor']:.2f}",
+                fg="#2E7D32")
 
-        # 部门列表
-        depts_frame = ttk.LabelFrame(self.factory_body, text="Departments", padding=6)
-        depts_frame.pack(fill="x", pady=4)
-        for dept in DEPARTMENTS:
-            did = dept["id"]
-            built = did in g.factory_departments
-            cost_parts = [f"G{dept['cost_gold']}"] if dept["cost_gold"] > 0 else []
-            for k, v in dept["cost_resources"].items():
-                cost_parts.append(f"{k}{v}")
-            cost_str = " | ".join(cost_parts) if cost_parts else "Free"
-            bg = "#E8F5E9" if built else "#ECEFF1"
-            text = f"{'✅' if built else '🔒'} {dept['name']} — {dept['desc']} [{cost_str}]"
-            cmd = (lambda d=dept: self._buy_dept(d["id"])) if not built else None
-            btn = tk.Button(depts_frame, text=text, font=("Consolas", 9), bg=bg,
-                             fg="#333", anchor="w", relief="groove", padx=8,
-                             command=cmd)
-            btn.pack(fill="x", pady=1)
+            # 部门列表
+            depts_frame = ttk.LabelFrame(self.factory_body, text="Departments", padding=6)
+            depts_frame.pack(fill="x", pady=4)
+            for dept in DEPARTMENTS:
+                did = dept["id"]
+                built = did in g.factory_departments
+                cost_parts = [f"G{dept['cost_gold']}"] if dept["cost_gold"] > 0 else []
+                for k, v in dept["cost_resources"].items():
+                    cost_parts.append(f"{k}{v}")
+                cost_str = " | ".join(cost_parts) if cost_parts else "Free"
+                bg = "#E8F5E9" if built else "#ECEFF1"
+                text = f"{'✅' if built else '🔒'} {dept['name']} — {dept['desc']} [{cost_str}]"
+                cmd = (lambda d=dept: self._buy_dept(d["id"])) if not built else None
+                btn = tk.Button(depts_frame, text=text, font=("Consolas", 9), bg=bg,
+                                 fg="#333", anchor="w", relief="groove", padx=8,
+                                 command=cmd)
+                btn.pack(fill="x", pady=1)
 
-        # 劳工管理
-        workers_frame = ttk.LabelFrame(self.factory_body, text="Workers", padding=6)
-        workers_frame.pack(fill="x", pady=4)
-        tk.Label(workers_frame, text=f"Count: {finfo['worker_count']}/{MAX_FACTORY_WORKERS}  "
-                                     f"(+15% each, {FACTORY_WORKER_COST_GOLD}G/worker)",
-                 font=("Arial", 9), fg="#555").pack(anchor="w")
-        btns = tk.Frame(workers_frame)
-        btns.pack()
-        tk.Button(btns, text="+ Hire", font=("Arial", 9, "bold"), bg="#4CAF50", fg="white",
-                  command=self._hire_factory_worker).pack(side="left", padx=4)
-        tk.Button(btns, text="- Fire", font=("Arial", 9), bg="#F44336", fg="white",
-                  command=self._fire_factory_worker).pack(side="left", padx=4)
+            # 劳工管理
+            workers_frame = ttk.LabelFrame(self.factory_body, text="Workers", padding=6)
+            workers_frame.pack(fill="x", pady=4)
+            tk.Label(workers_frame, text=f"Count: {finfo['worker_count']}/{MAX_FACTORY_WORKERS}  "
+                                         f"(+15% each, {FACTORY_WORKER_COST_GOLD}G/worker)",
+                     font=("Arial", 9), fg="#555").pack(anchor="w")
+            btns = tk.Frame(workers_frame)
+            btns.pack()
+            tk.Button(btns, text="+ Hire", font=("Arial", 9, "bold"), bg="#4CAF50", fg="white",
+                      command=self._hire_factory_worker).pack(side="left", padx=4)
+            tk.Button(btns, text="- Fire", font=("Arial", 9), bg="#F44336", fg="white",
+                      command=self._fire_factory_worker).pack(side="left", padx=4)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            if hasattr(self, 'game'):
+                self.game.add_log(f"Factory UI ERROR: {e}")
 
     def _build_factory(self):
-        ok, msg = self.game.build_factory()
-        self.game.add_log(msg)
-        self._refresh_factory_ui()
+        try:
+            ok, msg = self.game.build_factory()
+            self.game.add_log(msg)
+            self._refresh_factory_ui()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.game.add_log(f"ERROR: {e}")
 
     def _buy_dept(self, dept_id):
         from modules.factory import get_dept_by_id
@@ -921,105 +932,111 @@ class App:
                          command=lambda n=bname, i=idx: self.fire_worker(n, i)).pack(side="right", padx=1)
 
     def refresh_ui(self):
-        # Resources
-        for res, val in self.game.resources.items():
-            if res in self.res_labels:
-                self.res_labels[res].config(text=str(val))
-        self.gold_label.config(text=f"\U0001FA99 {self.game.player.gold}")
-        self.kills_label.config(text=f"Kills: {self.game.player.kill_count}")
+        try:
+            # Resources
+            for res, val in self.game.resources.items():
+                if res in self.res_labels:
+                    self.res_labels[res].config(text=str(val))
+            self.gold_label.config(text=f"🪙 {self.game.player.gold}")
+            self.kills_label.config(text=f"Kills: {self.game.player.kill_count}")
 
-        # Hero
-        p = self.game.player
-        max_hp = p.get_max_hp_with_bonus()
-        self.hp_var.set(f"HP: {p.hp}/{max_hp}")
-        self.attack_var.set(f"ATK: {p.get_total_attack()}")
-        self.defense_var.set(f"DEF: {p.get_total_defense()}")
-        self.crit_var.set(f"CRIT: {p.get_crit_rate()}%")
-        self.level_var.set(f"Lv.{p.level}")
-        self.exp_var.set(f"EXP: {p.exp}/{p.level * 100}")
-        w_name = p.weapon["name"] if p.weapon and isinstance(p.weapon, dict) else "None"
-        a_name = p.armor["name"] if p.armor and isinstance(p.armor, dict) else "None"
-        self.weapon_var.set(f"Weapon: {w_name}")
-        self.armor_var.set(f"Armor: {a_name}")
-        self.potions_var.set(f"x{p.potions}")
+            # Hero
+            p = self.game.player
+            max_hp = p.get_max_hp_with_bonus()
+            self.hp_var.set(f"HP: {p.hp}/{max_hp}")
+            self.attack_var.set(f"ATK: {p.get_total_attack()}")
+            self.defense_var.set(f"DEF: {p.get_total_defense()}")
+            self.crit_var.set(f"CRIT: {p.get_crit_rate()}%")
+            self.level_var.set(f"Lv.{p.level}")
+            self.exp_var.set(f"EXP: {p.exp}/{p.level * 100}")
+            w_name = p.weapon["name"] if p.weapon and isinstance(p.weapon, dict) else "None"
+            a_name = p.armor["name"] if p.armor and isinstance(p.armor, dict) else "None"
+            self.weapon_var.set(f"Weapon: {w_name}")
+            self.armor_var.set(f"Armor: {a_name}")
+            self.potions_var.set(f"x{p.potions}")
 
-        # Map
-        self.map_var.set(self.game.current_map)
-        for mn, btn in self.map_buttons.items():
-            if mn in self.game.unlocked_maps:
-                btn.config(bg="#4CAF50", fg="white")
-            else:
-                cost = get_all_maps()[mn].get("unlock_cost", 0)
-                btn.config(bg="#BDBDBD", fg="#333", text=f"{mn}({cost}G)")
-
-        # Enemy
-        enemies = self.game.get_current_map_enemies()
-        if enemies and self.game.current_enemy_idx < len(enemies):
-            e = enemies[self.game.current_enemy_idx]
-            self.enemy_var.set(f"{e['name']}  HP:{e['hp']}  ATK:{e['attack']}")
-        else:
-            self.enemy_var.set("No enemy")
-
-        # Inventory
-        inv = p.get_inventory()
-        self.inv_count_label.config(text=f"{inv.count()}/20")
-        for i in range(20):
-            slot = self.inv_slots[i]
-            item = inv.get(i)
-            if item:
-                item_type = item.get("type", "equipment")
-                if item_type == "novelty":
-                    # 杂货物品
-                    rc = NOVELTY_RARITY_COLORS.get(item.get("rarity_idx", 0), "#888")
-                    txt = item["name"]
-                    slot["lbl"].config(text=txt, fg=rc)
-                    slot["type_lbl"].config(text="🎁", fg=rc)
-                    # S按钮：所有杂货均可出售
-                    slot["btn_s"].config(state="normal", bg="#FF9800", activebackground="#FF9800")
-                    if item.get("kind") == "plant_seed":
-                        # 植物种子：E按钮改为种植
-                        slot["btn_e"].config(state="normal", bg="#4CAF50", fg="white",
-                                          activebackground="#388E3C",
-                                          command=lambda idx=i: self.use_novelty_item(idx))
-                    else:
-                        # 其他杂货：E禁用
-                        slot["btn_e"].config(state="disabled", bg="#BDBDBD", activebackground="#BDBDBD",
-                                          text="E")
+            # Map
+            self.map_var.set(self.game.current_map)
+            for mn, btn in self.map_buttons.items():
+                if mn in self.game.unlocked_maps:
+                    btn.config(bg="#4CAF50", fg="white")
                 else:
-                    # 装备
-                    rc = item.get("rarity_color", "#333")
-                    lvl_req = item.get("level_req", 0)
-                    sell_price = item.get("sell_price", 10)
-                    icon = "\u2705" if p.level >= lvl_req else "\U0001F512"
-                    if item["type"] == "weapon":
-                        txt = f"{icon} {item['name']} ATK:{item['attack']}"
-                        slot["type_lbl"].config(text="⚔", fg="#7B1FA2")
-                    else:
-                        txt = f"{icon} {item['name']} DEF:{item['defense']}"
-                        slot["type_lbl"].config(text="🛡", fg="#512DA8")
-                    txt += f" \U0001F4B0{sell_price}"
-                    slot["lbl"].config(text=txt, fg=rc)
-                    slot["btn_e"].config(state="normal" if p.level >= lvl_req else "disabled",
-                                      bg="#4CAF50" if p.level >= lvl_req else "#BDBDBD",
-                                      activebackground="#4CAF50" if p.level >= lvl_req else "#BDBDBD",
-                                      text="E",
-                                      command=lambda idx=i: self.equip_item(idx))
-                    slot["btn_s"].config(state="normal", bg="#FF9800", activebackground="#FF9800")
-            else:
-                slot["lbl"].config(text="Empty", fg="#ccc")
-                slot["type_lbl"].config(text="")
-                slot["btn_e"].config(state="disabled", bg="#BDBDBD", activebackground="#BDBDBD")
-                slot["btn_s"].config(state="disabled", bg="#BDBDBD", activebackground="#BDBDBD")
+                    cost = get_all_maps()[mn].get("unlock_cost", 0)
+                    btn.config(bg="#BDBDBD", fg="#333", text=f"{mn}({cost}G)")
 
-        # Log
-        self.log_listbox.delete(0, tk.END)
-        for log in self.game.logs[-50:]:
-            self.log_listbox.insert(tk.END, log)
-        self.log_listbox.yview_moveto(1)
-        self.refresh_buildings()
-        self.refresh_farm_ui()
-        self._refresh_factory_ui()
-        self.root.after(300, self.refresh_ui)
+            # Enemy
+            enemies = self.game.get_current_map_enemies()
+            if enemies and self.game.current_enemy_idx < len(enemies):
+                e = enemies[self.game.current_enemy_idx]
+                self.enemy_var.set(f"{e['name']}  HP:{e['hp']}  ATK:{e['attack']}")
+            else:
+                self.enemy_var.set("No enemy")
+
+            # Inventory
+            inv = p.get_inventory()
+            self.inv_count_label.config(text=f"{inv.count()}/20")
+            for i in range(20):
+                slot = self.inv_slots[i]
+                item = inv.get(i)
+                if item:
+                    item_type = item.get("type", "equipment")
+                    if item_type == "novelty":
+                        # 杂货物品
+                        rc = NOVELTY_RARITY_COLORS.get(item.get("rarity_idx", 0), "#888")
+                        txt = item["name"]
+                        slot["lbl"].config(text=txt, fg=rc)
+                        slot["type_lbl"].config(text="🎁", fg=rc)
+                        # S按钮：所有杂货均可出售
+                        slot["btn_s"].config(state="normal", bg="#FF9800", activebackground="#FF9800")
+                        if item.get("kind") == "plant_seed":
+                            # 植物种子：E按钮改为种植
+                            slot["btn_e"].config(state="normal", bg="#4CAF50", fg="white",
+                                              activebackground="#388E3C",
+                                              command=lambda idx=i: self.use_novelty_item(idx))
+                        else:
+                            # 其他杂货：E禁用
+                            slot["btn_e"].config(state="disabled", bg="#BDBDBD", activebackground="#BDBDBD",
+                                              text="E")
+                    else:
+                        # 装备
+                        rc = item.get("rarity_color", "#333")
+                        lvl_req = item.get("level_req", 0)
+                        sell_price = item.get("sell_price", 10)
+                        icon = "✅" if p.level >= lvl_req else "🔒"
+                        if item["type"] == "weapon":
+                            txt = f"{icon} {item['name']} ATK:{item['attack']}"
+                            slot["type_lbl"].config(text="⚔", fg="#7B1FA2")
+                        else:
+                            txt = f"{icon} {item['name']} DEF:{item['defense']}"
+                            slot["type_lbl"].config(text="🛡", fg="#512DA8")
+                        txt += f" 💰{sell_price}"
+                        slot["lbl"].config(text=txt, fg=rc)
+                        slot["btn_e"].config(state="normal" if p.level >= lvl_req else "disabled",
+                                          bg="#4CAF50" if p.level >= lvl_req else "#BDBDBD",
+                                          activebackground="#4CAF50" if p.level >= lvl_req else "#BDBDBD",
+                                          text="E",
+                                          command=lambda idx=i: self.equip_item(idx))
+                        slot["btn_s"].config(state="normal", bg="#FF9800", activebackground="#FF9800")
+                else:
+                    slot["lbl"].config(text="Empty", fg="#ccc")
+                    slot["type_lbl"].config(text="")
+                    slot["btn_e"].config(state="disabled", bg="#BDBDBD", activebackground="#BDBDBD")
+                    slot["btn_s"].config(state="disabled", bg="#BDBDBD", activebackground="#BDBDBD")
+
+            # Log
+            self.log_listbox.delete(0, tk.END)
+            for log in self.game.logs[-50:]:
+                self.log_listbox.insert(tk.END, log)
+            self.log_listbox.yview_moveto(1)
+            self.refresh_buildings()
+            self.refresh_farm_ui()
+            self._refresh_factory_ui()
+        except Exception as e:
+            import traceback
+            print("ERROR in refresh_ui:")
+            traceback.print_exc()
+        finally:
+            self.root.after(300, self.refresh_ui)  # 确保循环继续
 
     def update_loop(self):
         pass
