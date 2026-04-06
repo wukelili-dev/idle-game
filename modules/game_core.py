@@ -292,7 +292,7 @@ class GameCore:
         if not dept:
             return False, "部门不存在"
 
-        cost = {"Gold": dept["cost_gold"], **dept["cost_resources"]}
+        cost = {"金币": dept["cost_gold"], **dept["cost_resources"]}
         if not self.can_afford(cost):
             return False, "资源不足"
 
@@ -346,7 +346,7 @@ class GameCore:
     def can_afford(self, cost):
         """检查是否能支付成本"""
         for res, amount in cost.items():
-            if res == "Gold":
+            if res == "金币":
                 if self.player.gold < amount:
                     return False
             elif self.resources.get(res, 0) < amount:
@@ -356,7 +356,7 @@ class GameCore:
     def spend_resources(self, cost):
         """消耗资源"""
         for res, amount in cost.items():
-            if res == "Gold":
+            if res == "金币":
                 self.player.gold -= amount
             else:
                 self.resources[res] -= amount
@@ -380,7 +380,7 @@ class GameCore:
             self.building_workers[name] = []
         self.building_levels[name].append(1)
         self.building_workers[name].append(0)  # 初始0个劳工
-        self.add_log(f"Built {name}! Total: {self.buildings[name]}")
+        self.add_log(f"已建造 {name}! 总数: {self.buildings[name]}")
         self.start_building_production(name, self.buildings[name] - 1)
         return True, f"Built {name} x{self.buildings[name]}"
 
@@ -395,7 +395,7 @@ class GameCore:
         cost = config.get_upgrade_cost(new_level)
 
         if not self.can_afford(cost):
-            return False, f"Not enough! Need G{cost.get('Gold',0)} W{cost.get('Wood',0)}"
+            return False, f"Not enough! Need G{cost.get('金币',0)} W{cost.get('Wood',0)}"
 
         self.spend_resources(cost)
         self.building_levels[name][idx] = new_level
@@ -447,7 +447,7 @@ class GameCore:
         
         cost = config.worker_cost
         if not self.can_afford(cost):
-            return False, f"金币不足! 需要{cost['Gold']}G"
+            return False, f"金币不足! 需要{cost['金币']}G"
         
         self.spend_resources(cost)
         self.building_workers[name][idx] += 1
@@ -589,7 +589,7 @@ class GameCore:
     def buy_potion(self):
         """购买药水"""
         if self.player.gold < 25:
-            return False, "Not enough gold! Need 25G"
+            return False, "金币不足! Need 25G"
         self.player.gold -= 25
         self.player.potions += 1
         return True, "Bought potion!"
@@ -622,19 +622,19 @@ class GameCore:
             if heal > 0:
                 self.player.potions -= 1
                 self.player.heal(heal)
-                self.add_log(f"  💊 Auto-potion! +{heal} HP (remaining: {self.player.potions})")
+                self.add_log(f"  💊 自动药水! +{heal} HP (剩余: {self.player.potions})")
             return
 
         # 没有药水，尝试购买（金币不够就等下一次，绝不关闭自动药水）
         if self.player.gold >= 25:
             self.player.gold -= 25
             self.player.potions += 1
-            self.add_log(f"  💊 Auto-bought potion (25G), using now!")
+            self.add_log(f"  💊 自动购买药水 (25G), 使用中!")
             heal = min(20, max_hp - self.player.hp)
             if heal > 0:
                 self.player.potions -= 1
                 self.player.heal(heal)
-                self.add_log(f"  💊 Auto-potion! +{heal} HP (remaining: {self.player.potions})")
+                self.add_log(f"  💊 自动药水! +{heal} HP (剩余: {self.player.potions})")
 
     def set_auto_potion_threshold(self, value):
         """设置自动药水阈值"""
@@ -643,12 +643,12 @@ class GameCore:
     def battle(self, enemy_data, is_boss=False):
         """战斗逻辑"""
         if self.is_battling:
-            return False, "In battle..."
+            return False, "战斗中..."
 
         self.is_battling = True
         e_hp = enemy_data["hp"]
         boss_tag = " [BOSS]" if is_boss else ""
-        self.add_log(f"Battle: Hero vs {enemy_data['name']}{boss_tag}")
+        self.add_log(f"战斗: 英雄 vs {enemy_data['name']}{boss_tag}")
 
         while e_hp > 0 and self.player.hp > 0:
             # 玩家攻击
@@ -656,9 +656,9 @@ class GameCore:
             is_crit = random.randint(1, 100) <= self.player.get_crit_rate()
             if is_crit:
                 p_dmg = int(p_dmg * 1.5)
-                self.add_log(f"  CRIT! {p_dmg} damage!")
+                self.add_log(f"  暴击! {p_dmg} 伤害!")
             else:
-                self.add_log(f"  You dealt {p_dmg} damage")
+                self.add_log(f"  你对敌人造成 {p_dmg} 伤害")
             e_hp -= p_dmg
             
             # 吸血效果
@@ -682,8 +682,8 @@ class GameCore:
 
             # 敌人攻击
             e_dmg = max(1, enemy_data["attack"] - self.player.get_total_defense() // 2 + random.randint(-2, 2))
-            self.player.take_damage(e_dmg)
-            self.add_log(f"  {enemy_data['name']} dealt {e_dmg} damage")
+            self.player.take_伤害(e_dmg)
+            self.add_log(f"  {enemy_data['name']} 对英雄造成 {e_dmg} 伤害")
 
             # 自动药水检查（被攻击后立即判断）
             self._try_auto_potion()
@@ -691,10 +691,10 @@ class GameCore:
             time.sleep(0.5)
 
         if self.player.hp > 0:
-            self.add_log(f"Victory! Defeated {enemy_data['name']}!")
+            self.add_log(f"胜利! 击败 {enemy_data['name']}!")
             self.player.gold += enemy_data["gold"]
             self.player.kill_count += 1
-            self.add_log(f"  +{enemy_data['exp']} EXP +{enemy_data['gold']} Gold")
+            self.add_log(f"  +{enemy_data['exp']} 经验 +{enemy_data['gold']} 金币")
             for item, amount in enemy_data["drops"].items():
                 self.resources[item] = self.resources.get(item, 0) + amount
                 self.add_log(f"  +{amount} {item}")
@@ -733,9 +733,9 @@ class GameCore:
             self.current_enemy_is_boss = next_is_boss
             return True, "Victory"
         else:
-            self.add_log(f"Defeated by {enemy_data['name']}!")
+            self.add_log(f"被 {enemy_data['name']}!")
             self.player.hp = self.player.get_max_hp_with_bonus() // 2
-            self.add_log(f"Recovered: {self.player.hp}/{self.player.get_max_hp_with_bonus()}")
+            self.add_log(f"恢复: {self.player.hp}/{self.player.get_max_hp_with_bonus()}")
             # 战斗失败后也获取新敌人
             next_enemy, next_is_boss = get_random_enemy(self.current_map)
             self.current_enemy = next_enemy
@@ -763,7 +763,7 @@ class GameCore:
                     result, msg = self.battle(enemy, is_boss=is_boss)
                     self.is_battling = False
                 else:
-                    self.add_log("No enemies available!")
+                    self.add_log("没有可用敌人!")
                     break
             time.sleep(0.5)
 
@@ -809,7 +809,7 @@ class GameCore:
     def _calc_shop_sell_price(self, cost):
         """计算商店装备售价（80%）"""
         # 只计算金币成本，其他资源按比例转换
-        gold_value = cost.get("Gold", 0)
+        gold_value = cost.get("金币", 0)
         # Wood=2G, Iron=3G, Leather=2G, Stone=1G
         gold_value += cost.get("Wood", 0) * 2
         gold_value += cost.get("Iron", 0) * 3

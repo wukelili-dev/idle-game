@@ -1,5 +1,5 @@
 """
-Hero Workshop v3.0 - Idle Game
+勇者工坊 v3.0 - Idle Game
 Run: python main.py
 """
 
@@ -26,7 +26,7 @@ class App:
     def __init__(self):
         self.game = GameCore()
         self.root = tk.Tk()
-        self.root.title("Hero Workshop v3.0")
+        self.root.title("勇者工坊 v3.0")
         self.root.geometry("1280x900")
         self.root.resizable(True, True)
 
@@ -44,12 +44,12 @@ class App:
         # ── Top bar ──
         top = tk.Frame(self.root, relief="groove", bd=1)
         top.pack(fill="x", pady=0)
-        tk.Label(top, text="\u2694 Hero Workshop v3.0",
+        tk.Label(top, text="\u2694 勇者工坊 v3.0",
                  font=("Arial", 15, "bold")).pack(side="left", padx=15, pady=6)
         self.gold_label = tk.Label(top, text="\U0001FA99 100",
                                    font=("Arial", 14, "bold"), fg="#B8860B")
         self.gold_label.pack(side="right", padx=15, pady=6)
-        self.kills_label = tk.Label(top, text="Kills: 0",
+        self.kills_label = tk.Label(top, text="击杀: 0",
                                     font=("Arial", 10), fg="#888")
         self.kills_label.pack(side="right", padx=10, pady=6)
 
@@ -81,17 +81,17 @@ class App:
         # ── Bottom bar ──
         bar = tk.Frame(self.root, relief="groove", bd=1)
         bar.pack(fill="x")
-        tk.Button(bar, text="Save", command=self.save_game,
+        tk.Button(bar, text="存档", command=self.save_game,
                   bg="#5B9BD5", fg="white", font=("Arial", 9),
                   relief="groove", padx=12).pack(side="left", padx=8, pady=4)
-        tk.Button(bar, text="Load", command=self.load_game,
+        tk.Button(bar, text="读档", command=self.load_game,
                   bg="#5B9BD5", fg="white", font=("Arial", 9),
                   relief="groove", padx=12).pack(side="left", padx=4, pady=4)
-        tk.Button(bar, text="Help", command=self.show_help,
+        tk.Button(bar, text="帮助", command=self.show_help,
                   bg="#999", fg="white", font=("Arial", 9),
                   relief="groove", padx=12).pack(side="right", padx=8, pady=4)
 
-    # ── Left: Resources + Buildings + Wonders (scrollable) ──
+    # ── Left: 资源 + 建筑 + 奇观 (scrollable) ──
     def _build_left(self, parent):
         # Canvas + scrollbar for entire left panel
         canvas = tk.Canvas(parent, highlightthickness=0)
@@ -118,8 +118,8 @@ class App:
         self._left_canvas = canvas
         self._left_inner = inner
 
-        # Resources
-        rf = ttk.LabelFrame(inner, text="\U0001F4E6 Resources", padding=6)
+        # 资源
+        rf = ttk.LabelFrame(inner, text="\U0001F4E6 资源", padding=6)
         rf.pack(fill="x", padx=4, pady=(6, 3))
         self.res_labels = {}
         self.res_buy_entries = {}
@@ -134,7 +134,7 @@ class App:
                                             fg="#333", anchor="w", width=6)
             self.res_labels[res].pack(side="left")
             
-            # Buy/Sell buttons
+            # 购买/出售 buttons
             tk.Button(row, text="B", font=("Arial", 7), bg="#4CAF50", fg="white",
                       width=2, relief="raised",
                       command=lambda r=res: self.buy_material(r)).pack(side="left", padx=1)
@@ -145,8 +145,8 @@ class App:
             self.res_buy_entries[res].insert(0, "10")
             self.res_buy_entries[res].pack(side="left", padx=2)
 
-        # Buildings
-        bf = ttk.LabelFrame(inner, text="\U0001F3D7 Buildings", padding=6)
+        # 建筑
+        bf = ttk.LabelFrame(inner, text="\U0001F3D7 建筑", padding=6)
         bf.pack(fill="x", padx=4, pady=3)
         self.building_widgets = {}
         for bname in get_all_building_names():
@@ -159,10 +159,10 @@ class App:
             count_lbl = tk.Label(hdr, text="x0", font=("Arial", 9), fg="#888")
             count_lbl.pack(side="right")
 
-            info_lbl = tk.Label(bframe, text="Not built", font=("Arial", 8), fg="#aaa")
+            info_lbl = tk.Label(bframe, text="未建造", font=("Arial", 8), fg="#aaa")
             info_lbl.pack(anchor="w", padx=6)
 
-            build_btn = tk.Button(bframe, text="Build",
+            build_btn = tk.Button(bframe, text="建造",
                                   command=lambda n=bname: self.build_building(n),
                                   bg="#4CAF50", fg="white", font=("Arial", 9),
                                   relief="groove", padx=8)
@@ -177,8 +177,8 @@ class App:
                 "upgrade_frame": upgrade_frame,
             }
 
-        # Wonders
-        wf = ttk.LabelFrame(inner, text="\u2728 Wonders", padding=6)
+        # 奇观
+        wf = ttk.LabelFrame(inner, text="\u2728 奇观", padding=6)
         wf.pack(fill="x", padx=4, pady=3)
         self.wonder_buttons = {}
         for wn in get_wonder_names():
@@ -188,20 +188,20 @@ class App:
             btn.pack(fill="x", pady=2)
             self.wonder_buttons[wn] = btn
 
-    # ── Center: Hero + Map + Battle ──
+    # ── Center: Hero + 地图 + Battle ──
     def _build_center(self, parent):
         # Hero stats
-        hf = ttk.LabelFrame(parent, text="\U0001F9D1 Hero Stats", padding=8)
+        hf = ttk.LabelFrame(parent, text="\U0001F9D1 英雄属性", padding=8)
         hf.pack(fill="x", padx=4, pady=(4, 3))
 
-        self.hp_var = tk.StringVar(value="HP: 100/100")
-        self.attack_var = tk.StringVar(value="ATK: 10")
-        self.defense_var = tk.StringVar(value="DEF: 5")
+        self.hp_var = tk.StringVar(value="生命: 100/100")
+        self.attack_var = tk.StringVar(value="攻击: 10")
+        self.defense_var = tk.StringVar(value="防御: 5")
         self.crit_var = tk.StringVar(value="CRIT: 0%")
         self.level_var = tk.StringVar(value="Lv.1")
-        self.exp_var = tk.StringVar(value="EXP: 0/100")
-        self.weapon_var = tk.StringVar(value="Weapon: None")
-        self.armor_var = tk.StringVar(value="Armor: None")
+        self.exp_var = tk.StringVar(value="经验: 0/100")
+        self.weapon_var = tk.StringVar(value="武器: None")
+        self.armor_var = tk.StringVar(value="护甲: None")
 
         for var in [self.level_var, self.exp_var, self.hp_var,
                     self.attack_var, self.defense_var, self.crit_var,
@@ -209,8 +209,8 @@ class App:
             tk.Label(hf, textvariable=var, font=("Arial", 10),
                      anchor="w").pack(fill="x", padx=4, pady=1)
 
-        # Map
-        mf = ttk.LabelFrame(parent, text="\U0001F5FA Map", padding=8)
+        # 地图
+        mf = ttk.LabelFrame(parent, text="\U0001F5FA 地图", padding=8)
         mf.pack(fill="x", padx=4, pady=3)
 
         self.map_var = tk.StringVar(value="\u50B2\u6765\u56FD")
@@ -226,8 +226,8 @@ class App:
             btn.pack(side="left", padx=2, pady=2)
             self.map_buttons[mn] = btn
 
-        # Enemy
-        ef = ttk.LabelFrame(parent, text="💀 Enemy", padding=8)
+        # 敌人
+        ef = ttk.LabelFrame(parent, text="💀 敌人", padding=8)
         ef.pack(fill="x", padx=4, pady=3)
 
         self.enemy_var = tk.StringVar(value="???")
@@ -245,38 +245,38 @@ class App:
         btn_area = tk.Frame(parent)
         btn_area.pack(pady=6)
 
-        self.battle_btn = tk.Button(btn_area, text="\u2694 BATTLE",
+        self.battle_btn = tk.Button(btn_area, text="\u2694 战斗",
                                     command=self.do_battle,
                                     font=("Arial", 12, "bold"), bg="#2196F3",
                                     fg="white", relief="groove", width=16, pady=4)
         self.battle_btn.pack(pady=3)
 
-        self.auto_btn = tk.Button(btn_area, text="\u26A1 Auto Battle",
+        self.auto_btn = tk.Button(btn_area, text="\u26A1 自动战斗",
                                   command=self.toggle_auto,
                                   font=("Arial", 10), bg="#FF9800",
                                   fg="white", relief="groove", width=16, pady=2)
         self.auto_btn.pack(pady=3)
-        self.auto_label = tk.Label(btn_area, text="Auto: OFF", fg="#999",
+        self.auto_label = tk.Label(btn_area, text="自动: 关", fg="#999",
                                    font=("Arial", 9))
         self.auto_label.pack()
 
-        # Potions
-        pot_area = ttk.LabelFrame(parent, text="\U0001F9EA Potions", padding=6)
+        # 药水
+        pot_area = ttk.LabelFrame(parent, text="\U0001F9EA 药水", padding=6)
         pot_area.pack(fill="x", padx=4, pady=3)
         self.potions_var = tk.StringVar(value="x0")
-        tk.Button(pot_area, text="Buy (25G)", command=self.do_buy_potion,
+        tk.Button(pot_area, text="购买 (25G)", command=self.do_buy_potion,
                   bg="#4CAF50", fg="white", font=("Arial", 9),
                   relief="groove", padx=8).pack(side="left", padx=4)
         tk.Label(pot_area, textvariable=self.potions_var,
                  font=("Arial", 11, "bold")).pack(side="left", padx=8)
-        tk.Button(pot_area, text="Use (+20HP)", command=self.do_use_potion,
+        tk.Button(pot_area, text="使用 (+20HP)", command=self.do_use_potion,
                   bg="#E91E63", fg="white", font=("Arial", 9),
                   relief="groove", padx=8).pack(side="left", padx=4)
 
         # Auto-potion setting
-        ap_area = ttk.LabelFrame(parent, text="\U0001F9EA Auto Potion", padding=6)
+        ap_area = ttk.LabelFrame(parent, text="\U0001F9EA 自动药水", padding=6)
         ap_area.pack(fill="x", padx=4, pady=3)
-        tk.Label(ap_area, text="When HP < ", font=("Arial", 9)).pack(side="left", padx=2)
+        tk.Label(ap_area, text="当 HP < ", font=("Arial", 9)).pack(side="left", padx=2)
         self.auto_potion_var = tk.StringVar(value="OFF")
         ap_combo = ttk.Combobox(ap_area, textvariable=self.auto_potion_var,
                                 values=["OFF", "30%", "50%", "80%"],
@@ -293,7 +293,7 @@ class App:
         nb.pack(fill="both", expand=True)
 
         wtab = tk.Frame(nb)
-        nb.add(wtab, text=" \u2694 Weapons ")
+        nb.add(wtab, text=" \u2694 武器 ")
         self._build_shop(wtab, WEAPONS, "weapon")
 
         atab = tk.Frame(nb)
@@ -303,16 +303,16 @@ class App:
         # Novelty shop tab
         ntab = tk.Frame(nb)
         nb.add(ntab, text=" \U0001F3FA Novelty ")
-        self._build_novelty_shop(ntab)
+        self._build_杂货_shop(ntab)
 
         # ── Farm Tab ──
         self.farm_tab = tk.Frame(nb)
         nb.add(self.farm_tab, text=" \U0001F31F Farm ")
         self._build_farm_tab(self.farm_tab)
 
-        # ── Factory Tab ──
+        # ── 工厂 Tab ──
         self.factory_tab = tk.Frame(nb)
-        nb.add(self.factory_tab, text=" \U0001F3ED Factory ")
+        nb.add(self.factory_tab, text=" \U0001F3ED 工厂 ")
         self._build_factory_tab(self.factory_tab)
 
     def _build_shop(self, parent, items, kind):
@@ -354,7 +354,7 @@ class App:
         return " ".join(f"{m.get(k, k)}{v}" for k, v in cost.items())
 
     # ── Novelty Shop ──
-    def _build_novelty_shop(self, parent):
+    def _build_杂货_shop(self, parent):
         canvas = tk.Canvas(parent, highlightthickness=0)
         sb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=sb.set)
@@ -397,13 +397,13 @@ class App:
             tk.Label(frame, text=item["desc"], font=("Arial", 8),
                      fg="#666", anchor="w").pack(fill="x", padx=6, pady=(0, 4))
 
-            # Buy button
-            tk.Button(frame, text="购买", command=lambda it=item: self.buy_novelty(it),
+            # 购买 button
+            tk.Button(frame, text="购买", command=lambda it=item: self.buy_杂货(it),
                       bg=color, fg="white", font=("Arial", 8, "bold"),
                       relief="groove", padx=8).pack(side="right", padx=6, pady=4)
 
-    def buy_novelty(self, item):
-        ok, msg = self.game.buy_novelty_item(item)
+    def buy_杂货(self, item):
+        ok, msg = self.game.buy_杂货_item(item)
         self.game.add_log(msg)
         self.refresh_ui()
 
@@ -414,7 +414,7 @@ class App:
         top = tk.Frame(parent)
         top.pack(fill="x", padx=6, pady=4)
 
-        tk.Label(top, text="🌱 My Farm", font=("Arial", 11, "bold")).pack(side="left")
+        tk.Label(top, text="🌱 我的农场", font=("Arial", 11, "bold")).pack(side="left")
         self.farm_info_lbl = tk.Label(top, text="0/10 plants",
                                        font=("Arial", 10), fg="#555")
         self.farm_info_lbl.pack(side="right")
@@ -435,7 +435,7 @@ class App:
         self.farm_plant_inner = farm_inner
 
         # Seed shop (scrollable)
-        shop_lbl_frame = ttk.LabelFrame(parent, text="Seed Shop", padding=6)
+        shop_lbl_frame = ttk.LabelFrame(parent, text="种子商店", padding=6)
         shop_lbl_frame.pack(fill="x", padx=6, pady=4)
         shop_container = tk.Frame(shop_lbl_frame)
         shop_container.pack(fill="x")
@@ -530,14 +530,14 @@ class App:
         self.game.add_log(msg)
         self.refresh_farm_ui()
 
-    # ═══════════════════ Factory ═══════════════════
+    # ═══════════════════ 工厂 ═══════════════════
     def _build_factory_tab(self, parent):
         from modules.factory import FACTORY_BUILD_COST, DEPARTMENTS, MAX_FACTORY_WORKERS
 
         top = tk.Frame(parent)
         top.pack(fill="x", padx=6, pady=4)
-        tk.Label(top, text="🏭 Factory", font=("Arial", 11, "bold")).pack(side="left")
-        self.factory_status_lbl = tk.Label(top, text="Not built",
+        tk.Label(top, text="🏭 工厂", font=("Arial", 11, "bold")).pack(side="left")
+        self.factory_status_lbl = tk.Label(top, text="未建造",
                                             font=("Arial", 10), fg="#c00")
         self.factory_status_lbl.pack(side="right")
 
@@ -571,12 +571,12 @@ class App:
 
             if g.factory is None:
                 # 建造按钮
-                tk.Label(self.factory_body, text="Factory not yet built!",
+                tk.Label(self.factory_body, text="工厂尚未建造!",
                          font=("Arial", 10), fg="#888").pack(pady=8)
                 cost_str = " ".join(f"{k}{v}" for k, v in FACTORY_BUILD_COST.items())
-                tk.Label(self.factory_body, text=f"Cost: {cost_str}",
+                tk.Label(self.factory_body, text=f"费用: {cost_str}",
                          font=("Consolas", 9), fg="#555").pack()
-                tk.Button(self.factory_body, text="🏗️ Build Factory",
+                tk.Button(self.factory_body, text="🏗️ 建造 工厂",
                           font=("Arial", 11, "bold"), bg="#1976D2", fg="white",
                           relief="groove", command=self._build_factory).pack(pady=8)
                 return
@@ -588,7 +588,7 @@ class App:
                 fg="#2E7D32")
 
             # 部门列表
-            depts_frame = ttk.LabelFrame(self.factory_body, text="Departments", padding=6)
+            depts_frame = ttk.LabelFrame(self.factory_body, text="部门", padding=6)
             depts_frame.pack(fill="x", pady=4)
             for dept in DEPARTMENTS:
                 did = dept["id"]
@@ -599,17 +599,17 @@ class App:
                 cost_str = " | ".join(cost_parts) if cost_parts else "Free"
                 bg = "#E8F5E9" if built else "#ECEFF1"
                 text = f"{'✅' if built else '🔒'} {dept['name']} — {dept['desc']} [{cost_str}]"
-                cmd = (lambda d=dept: self._buy_dept(d["id"])) if not built else None
+                cmd = (lambda d=dept: self._buy_dept(d["id"])) if 未建造 else None
                 btn = tk.Button(depts_frame, text=text, font=("Consolas", 9), bg=bg,
                                  fg="#333", anchor="w", relief="groove", padx=8,
                                  command=cmd)
                 btn.pack(fill="x", pady=1)
 
             # 劳工管理
-            workers_frame = ttk.LabelFrame(self.factory_body, text="Workers", padding=6)
+            workers_frame = ttk.LabelFrame(self.factory_body, text="劳工", padding=6)
             workers_frame.pack(fill="x", pady=4)
-            tk.Label(workers_frame, text=f"Count: {finfo['worker_count']}/{MAX_FACTORY_WORKERS}  "
-                                         f"(+15% each, {FACTORY_WORKER_COST_GOLD}G/worker)",
+            tk.Label(workers_frame, text=f"数量: {finfo['worker_count']}/{MAX_FACTORY_WORKERS}  "
+                                         f"(每人+15%, {FACTORY_WORKER_COST_GOLD}G/人)",
                      font=("Arial", 9), fg="#555").pack(anchor="w")
             btns = tk.Frame(workers_frame)
             btns.pack()
@@ -621,7 +621,7 @@ class App:
             import traceback
             traceback.print_exc()
             if hasattr(self, 'game'):
-                self.game.add_log(f"Factory UI ERROR: {e}")
+                self.game.add_log(f"工厂 UI ERROR: {e}")
 
     def _build_factory(self):
         try:
@@ -695,7 +695,7 @@ class App:
 
     # ── Log ──
     def _build_log(self):
-        lf = ttk.LabelFrame(self.root, text="📜 Battle Log", padding=4)
+        lf = ttk.LabelFrame(self.root, text="📜 战斗日志", padding=4)
         lf.pack(fill="both", expand=True, padx=4, pady=(2, 2))
 
         sb = ttk.Scrollbar(lf)
@@ -752,7 +752,7 @@ class App:
                 self.game.change_map(map_name)
                 self.refresh_ui()
             else:
-                self.game.add_log(f"Cannot unlock: {msg}")
+                self.game.add_log(f"无法解锁: {msg}")
 
     def do_refresh_enemy(self):
         """刷新当前敌人"""
@@ -775,7 +775,7 @@ class App:
         from modules.maps import get_random_enemy
         enemy, is_boss = get_random_enemy(self.game.current_map)
         if not enemy:
-            self.game.add_log("No enemies!")
+            self.game.add_log("没有敌人!")
             return
         # 保存当前敌人信息
         self.game.current_enemy = enemy
@@ -796,11 +796,11 @@ class App:
     def toggle_auto(self):
         self.game.auto_battle = not self.game.auto_battle
         if self.game.auto_battle:
-            self.auto_label.config(text="Auto: ON", fg="#4CAF50")
+            self.auto_label.config(text="自动: 开", fg="#4CAF50")
             self.game.add_log("Auto battle ON!")
             self.game.start_auto_battle()
         else:
-            self.auto_label.config(text="Auto: OFF", fg="#999")
+            self.auto_label.config(text="自动: 关", fg="#999")
             self.game.add_log("Auto battle OFF.")
 
     def do_buy_potion(self):
@@ -852,8 +852,8 @@ class App:
             self.wonder_buttons[wonder_name].config(text=f"\u2705 {wonder_name}", state="disabled")
         self.refresh_ui()
 
-    def use_novelty_item(self, idx):
-        ok, msg = self.game.use_novelty_item(idx)
+    def use_杂货_item(self, idx):
+        ok, msg = self.game.use_杂货_item(idx)
         self.game.add_log(msg)
         self.refresh_ui()
 
@@ -905,7 +905,7 @@ class App:
                 self.building_widgets[bname]["info"].config(
                     text=f"Avg: {avg_output}/{avg_interval}s | \u26CF{total_workers}/{total_max}")
             else:
-                self.building_widgets[bname]["info"].config(text="Not built")
+                self.building_widgets[bname]["info"].config(text="未建造")
 
             # 快照对比：只有结构变化时才重建按钮
             workers_snap = tuple(
@@ -949,29 +949,29 @@ class App:
 
     def refresh_ui(self):
         try:
-            # Resources
+            # 资源
             for res, val in self.game.resources.items():
                 if res in self.res_labels:
                     self.res_labels[res].config(text=str(val))
             self.gold_label.config(text=f"🪙 {self.game.player.gold}")
-            self.kills_label.config(text=f"Kills: {self.game.player.kill_count}")
+            self.kills_label.config(text=f"击杀: {self.game.player.kill_count}")
 
             # Hero
             p = self.game.player
             max_hp = p.get_max_hp_with_bonus()
-            self.hp_var.set(f"HP: {p.hp}/{max_hp}")
-            self.attack_var.set(f"ATK: {p.get_total_attack()}")
-            self.defense_var.set(f"DEF: {p.get_total_defense()}")
+            self.hp_var.set(f"生命: {p.hp}/{max_hp}")
+            self.attack_var.set(f"攻击: {p.get_total_attack()}")
+            self.defense_var.set(f"防御: {p.get_total_defense()}")
             self.crit_var.set(f"CRIT: {p.get_crit_rate()}%")
             self.level_var.set(f"Lv.{p.level}")
-            self.exp_var.set(f"EXP: {p.exp}/{p.level * 100}")
+            self.exp_var.set(f"经验: {p.exp}/{p.level * 100}")
             w_name = p.weapon["name"] if p.weapon and isinstance(p.weapon, dict) else "None"
             a_name = p.armor["name"] if p.armor and isinstance(p.armor, dict) else "None"
-            self.weapon_var.set(f"Weapon: {w_name}")
-            self.armor_var.set(f"Armor: {a_name}")
+            self.weapon_var.set(f"武器: {w_name}")
+            self.armor_var.set(f"护甲: {a_name}")
             self.potions_var.set(f"x{p.potions}")
 
-            # Map
+            # 地图
             self.map_var.set(self.game.current_map)
             for mn, btn in self.map_buttons.items():
                 if mn in self.game.unlocked_maps:
@@ -980,7 +980,7 @@ class App:
                     cost = get_all_maps()[mn].get("unlock_cost", 0)
                     btn.config(bg="#BDBDBD", fg="#333", text=f"{mn}({cost}G)")
 
-            # Enemy
+            # 敌人
             enemy = self.game.current_enemy
             is_boss = self.game.current_enemy_is_boss
             if enemy:
@@ -997,7 +997,7 @@ class App:
                 item = inv.get(i)
                 if item:
                     item_type = item.get("type", "equipment")
-                    if item_type == "novelty":
+                    if item_type == "杂货":
                         # 杂货物品
                         rc = NOVELTY_RARITY_COLORS.get(item.get("rarity_idx", 0), "#888")
                         txt = item["name"]
@@ -1009,7 +1009,7 @@ class App:
                             # 植物种子：E按钮改为种植
                             slot["btn_e"].config(state="normal", bg="#4CAF50", fg="white",
                                               activebackground="#388E3C",
-                                              command=lambda idx=i: self.use_novelty_item(idx))
+                                              command=lambda idx=i: self.use_杂货_item(idx))
                         else:
                             # 其他杂货：E禁用
                             slot["btn_e"].config(state="disabled", bg="#BDBDBD", activebackground="#BDBDBD",
@@ -1126,20 +1126,20 @@ class App:
         self._restore_auto_potion_ui()
 
     def show_help(self):
-        msg = """Hero Workshop v3.0
+        msg = """勇者工坊 v3.0
 
-Maps:
+地图:
 - AoLai(Lv1): Butterfly,Parrot,Lobster,Crab | BOSS:9HeadDemon
 - DaTang(Lv11/500G): SilverArm,Techin,GoldArm,Captain | BOSS:SnakeSpirit
 - YangGuan(Lv15/1000G): TurkArcher,PersianBlade | BOSS:TurkBowKing,PersianAssassin
 - DongHai(Lv20/2000G): SeaGuard,TurtleGen,SnailDemon | BOSS:ShrimpFiend,Brahma,SeaSage,BloodSnail
 
-Buildings: Max 3 each. Workers boost +50%/person.
-Potions: 25G each, heal 20HP.
+建筑: 
+药水: 25G each, heal 20HP.
 
 Click map button to switch/unlock maps!
-Click Battle or Auto Battle to fight!"""
-        messagebox.showinfo("Help", msg)
+Click Battle or 自动战斗 to fight!"""
+        messagebox.showinfo("帮助", msg)
 
     def run(self):
         self.root.mainloop()
