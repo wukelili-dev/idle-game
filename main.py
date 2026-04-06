@@ -1044,16 +1044,8 @@ class App:
             self.log_listbox.delete(0, tk.END)
             for log in self.game.logs[-50:]:
                 self.log_listbox.insert(tk.END, log)
-            # 只有当滚动条在底部附近时才自动滚动到底部
-            # 用户手动滚动后保持位置
-            try:
-                # 获取当前滚动位置 (0=顶部, 1=底部)
-                current_pos = self.log_listbox.yview()[0]
-                # 如果当前位置在底部附近(>0.9)，则自动滚动
-                if current_pos > 0.9:
-                    self.log_listbox.yview_moveto(1)
-            except:
-                self.log_listbox.yview_moveto(1)
+            # 自动滚动到底部（最新日志）
+            self.log_listbox.see(tk.END)
             self.refresh_buildings()
             self.refresh_farm_ui()
             self._refresh_factory_ui()
