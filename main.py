@@ -30,10 +30,10 @@ class App:
         self.root.geometry("1280x900")
         self.root.resizable(True, True)
 
+        self._last_building_snap = {}
+        self._last_farm_snap = None
+        self._last_factory_snap = None
         self.setup_ui()
-        self._last_building_snap = {}   # {bname: (count, levels_tuple, workers_tuple)}
-        self._last_farm_snap = None     # (len(plants), [(id, stage, remaining, harvest_count), ...])
-        self._last_factory_snap = None  # (tuple(departments), workers, factory_built)
         self.refresh_ui()
         self.update_thread = threading.Thread(target=self.update_loop, daemon=True)
         self.update_thread.start()
