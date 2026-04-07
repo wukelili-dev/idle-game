@@ -1024,6 +1024,8 @@ class App:
                     slot["btn_s"].config(state="disabled", bg="#BDBDBD", activebackground="#BDBDBD")
 
             # Log - 保存当前位置，刷新后恢复
+            if not hasattr(self, 'log_listbox') or self.log_listbox is None:
+                return
             was_at_bottom = False
             try:
                 pos = self.log_listbox.yview()
