@@ -682,7 +682,7 @@ class GameCore:
 
             # 敌人攻击
             e_dmg = max(1, enemy_data["attack"] - self.player.get_total_defense() // 2 + random.randint(-2, 2))
-            self.player.take_伤害(e_dmg)
+            self.player.take_damage(e_dmg)
             self.add_log(f"  {enemy_data['name']} 对英雄造成 {e_dmg} 伤害")
 
             # 自动药水检查（被攻击后立即判断）

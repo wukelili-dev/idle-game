@@ -284,6 +284,19 @@ class App:
                                           font=("Arial", 8), fg="#888")
         self.auto_potion_label.pack(side="left", padx=4)
 
+        # 日志面板
+        log_frame = ttk.LabelFrame(parent, text="\U0001F4DD 战斗日志", padding=4)
+        log_frame.pack(fill="both", expand=True, padx=4, pady=3)
+
+        scroll_y = ttk.Scrollbar(log_frame)
+        scroll_y.pack(side="right", fill="y")
+        self.log_listbox = tk.Listbox(log_frame, height=6,
+                                       font=("Consolas", 9),
+                                       yscrollcommand=scroll_y.set,
+                                       relief="groove", bg="#f5f5f5")
+        self.log_listbox.pack(fill="both", expand=True)
+        scroll_y.config(command=self.log_listbox.yview)
+
     # ── Right: Shop tabs ──
     def _build_right(self, parent):
         nb = ttk.Notebook(parent)
@@ -980,7 +993,7 @@ class App:
                 item = inv.get(i)
                 if item:
                     item_type = item.get("type", "equipment")
-                    if item_type == "杂货":
+                    if item_type == "novelty":
                         # 杂货物品
                         rc = NOVELTY_RARITY_COLORS.get(item.get("rarity_idx", 0), "#888")
                         txt = item["name"]
