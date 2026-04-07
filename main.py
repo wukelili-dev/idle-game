@@ -75,9 +75,6 @@ class App:
         # ── Bottom: Inventory grid ──
         self._build_inventory()
 
-        # ── Log ──
-        self._build_log()
-
         # ── Bottom bar ──
         bar = tk.Frame(self.root, relief="groove", bd=1)
         bar.pack(fill="x")
@@ -214,7 +211,7 @@ class App:
         mf.pack(fill="x", padx=4, pady=3)
 
         self.map_var = tk.StringVar(value="\u50B2\u6765\u56FD")
-        tk.Label(mf, textvariable=self.map_var, font=("Arial", 12, "bold"),
+        tk.Label(mf, textvariable=self.map_var, font=("Arial", 11, "bold"), width=12,
                  fg="#1565C0").pack(pady=2)
 
         map_btn_frame = tk.Frame(mf)
@@ -692,20 +689,6 @@ class App:
 
         for c in range(COLS):
             grid_frame.columnconfigure(c, weight=1)
-
-    # ── Log ──
-    def _build_log(self):
-        lf = ttk.LabelFrame(self.root, text="📜 战斗日志", padding=4)
-        lf.pack(fill="both", expand=True, padx=4, pady=(2, 2))
-
-        sb = ttk.Scrollbar(lf)
-        sb.pack(side="right", fill="y")
-        self.log_listbox = tk.Listbox(lf, font=("Consolas", 9),
-                                      selectbackground="#BBDEFB",
-                                      highlightthickness=0,
-                                      yscrollcommand=sb.set)
-        self.log_listbox.pack(side="left", fill="both", expand=True)
-        sb.config(command=self.log_listbox.yview)
 
     # ──────────────── Actions ────────────────
 
