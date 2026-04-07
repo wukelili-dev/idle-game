@@ -211,8 +211,8 @@ class App:
         mf.pack(fill="x", padx=4, pady=3)
 
         self.map_var = tk.StringVar(value="\u50B2\u6765\u56FD")
-        tk.Label(mf, textvariable=self.map_var, font=("Arial", 11, "bold"), width=12,
-                 fg="#1565C0").pack(pady=2)
+        tk.Label(mf, textvariable=self.map_var, font=("Arial", 11, "bold"), width=18,
+                 fg="#1565C0", anchor="center").pack(pady=2)
 
         map_btn_frame = tk.Frame(mf)
         map_btn_frame.pack(fill="x", pady=4)
