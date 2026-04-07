@@ -214,11 +214,21 @@ class App:
         tk.Label(mf, textvariable=self.map_var, font=("Arial", 11, "bold"), width=18,
                  fg="#1565C0", anchor="center").pack(pady=2)
 
-        map_btn_frame = tk.Frame(mf)
-        map_btn_frame.pack(fill="x", pady=4)
+        # 地图按钮区：Canvas + 水平滚动条
+        map_canvas_frame = tk.Frame(mf)
+        map_canvas_frame.pack(fill="x", pady=4)
+        map_canvas = tk.Canvas(map_canvas_frame, height=36, highlightthickness=0)
+        hscroll = ttk.Scrollbar(map_canvas_frame, orient="horizontal", command=map_canvas.xview)
+        map_canvas.configure(xscrollcommand=hscroll.set)
+        hscroll.pack(side="bottom", fill="x")
+        map_canvas.pack(side="top", fill="x")
+        self.map_btn_inner = tk.Frame(map_canvas)
+        map_canvas.create_window((0, 0), window=self.map_btn_inner, anchor="nw")
+        self.map_btn_inner.bind("<Configure>",
+                                lambda e: map_canvas.configure(scrollregion=map_canvas.bbox("all")))
         self.map_buttons = {}
         for mn in get_all_maps().keys():
-            btn = tk.Button(map_btn_frame, text=mn, command=lambda m=mn: self.change_map(m),
+            btn = tk.Button(self.map_btn_inner, text=mn, command=lambda m=mn: self.change_map(m),
                            font=("Arial", 8), relief="groove", padx=6)
             btn.pack(side="left", padx=2, pady=2)
             self.map_buttons[mn] = btn
