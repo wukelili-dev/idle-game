@@ -4,10 +4,10 @@
 
 # ── 工厂建造费用 ──
 FACTORY_BUILD_COST = {
-    "Wood": 50,
-    "Iron": 30,
-    "Stone": 40,
-    "Leather": 20,
+    "木材": 50,
+    "铁矿": 30,
+    "石头": 40,
+    "皮革": 20,
 }
 
 # ── 工厂基础产出 ──
@@ -31,7 +31,7 @@ DEPARTMENTS = [
         "id": "craft",
         "name": "加工车间",
         "cost_gold": 200,
-        "cost_resources": {"Wood": 30, "Stone": 20},
+        "cost_resources": {"木材": 30, "石头": 20},
         "bonus_factor": 0.3,
         "desc": "利润 +30%",
     },
@@ -39,7 +39,7 @@ DEPARTMENTS = [
         "id": "logistics",
         "name": "物流部门",
         "cost_gold": 350,
-        "cost_resources": {"Iron": 25, "Leather": 20},
+        "cost_resources": {"铁矿": 25, "皮革": 20},
         "bonus_factor": 0.4,
         "desc": "利润 +40%",
     },
@@ -47,7 +47,7 @@ DEPARTMENTS = [
         "id": "research",
         "name": "研发部门",
         "cost_gold": 500,
-        "cost_resources": {"Iron": 40, "Stone": 30},
+        "cost_resources": {"铁矿": 40, "石头": 30},
         "bonus_factor": 0.6,
         "desc": "利润 +60%",
     },
@@ -55,7 +55,7 @@ DEPARTMENTS = [
         "id": "magic",
         "name": "魔法工坊",
         "cost_gold": 1000,
-        "cost_resources": {"Stone": 50, "Iron": 50, "Leather": 30},
+        "cost_resources": {"石头": 50, "铁矿": 50, "皮革": 30},
         "bonus_factor": 1.0,
         "desc": "利润 +100%（传说级）",
     },
