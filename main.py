@@ -1,11 +1,11 @@
-"""
-勇者工坊 v3.0 - Idle Game
-Run: python main.py
+﻿"""
+勇者工坊 v5.1 - Flet UI (Flet 0.84 Correct API)
+Run: python main_flet.py
 """
 
-from modules.inventory import NOVELTY_ITEMS, NOVELTY_RARITY_COLORS, NOVELTY_RARITY_NAMES
-import tkinter as tk
-from tkinter import ttk, messagebox
+import flet as ft
+import asyncio
+import random
 import threading
 import time
 import json
@@ -14,1142 +14,1123 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from modules.equipment import WEAPONS, ARMORS
-from modules.buildings import (BUILDING_CONFIGS, get_all_building_names,
-                               get_all_wonders, get_wonder_names, WORKER_CONFIG)
-from modules.maps import get_all_maps, get_map_enemies, print_map_info, print_enemy_info
-from modules.hero import Hero
 from modules.game_core import GameCore
+from modules.equipment import WEAPONS, ARMORS
+from modules.buildings import get_all_building_names, get_wonder_names, BUILDING_CONFIGS
+from modules.maps import get_all_maps, get_random_enemy
+from modules.inventory import NOVELTY_ITEMS, NOVELTY_RARITY_COLORS, NOVELTY_RARITY_NAMES
+from modules.plants import get_plant_catalog, PLANT_RARITY_COLORS, PLANT_RARITY_NAMES
+from modules.tavern import generate_tavern_roster
+from modules.factory import DEPARTMENTS as FACTORY_DEPTS, FACTORY_BUILD_COST, calc_factory_bonus as calc_fb, FACTORY_BASE_PROFIT, FACTORY_BASE_INTERVAL_S
+
+SAVE_PATH = "D:\\pyproject\\hero_workshop\\save.json"
+I = ft.icons.Icons  # Flet 0.84: icons are at ft.icons.Icons.XXX
+RARITY_COLORS = ["#cccccc", "#4FC3F7", "#BA68C8", "#FFA726", "#EF5350"]
 
 
-class App:
-    def __init__(self):
+def Cs(name):
+    return getattr(ft.Colors, name, ft.Colors.GREY_500)
+
+
+def cost_str(cost):
+    if not cost:
+        return "Free"
+    m = {"\u91d1\u5e01": "\u91d1", "\u6728\u6750": "\u6728", "\u94c1\u77ff": "\u94c1",
+         "\u76ae\u9769": "\u76ae", "\u77f3\u5934": "\u77f3"}
+    return " ".join(f"{m.get(k, k)}{v}" for k, v in cost.items())
+
+
+class HeroWorkshopApp:
+    def __init__(self, page: ft.Page):
+        self.page = page
+        self.page.title = "\u52c7\u8005\u5de5\u574a v5.1"
+        self.page.window_width = 1280
+        self.page.window_height = 900
+        self.page.window_min_width = 960
+        self.page.window_min_height = 640
+        self.page.window_maximized = False
+        self.page.window_resizable = True
+        self.page.padding = 0
+        self.page.spacing = 0
+        self.page.font_family = "Microsoft YaHei"
+        self.page.theme = ft.Theme(font_family="Microsoft YaHei")
+        self.page.dark_theme = ft.Theme(font_family="Microsoft YaHei")
         self.game = GameCore()
-        self.root = tk.Tk()
-        self.root.title("勇者工坊 v3.0")
-        self.root.geometry("1280x900")
-        self.root.resizable(True, True)
+        self._refs = {}
+        self.auto_battle = False
+        self.auto_potion_threshold = 0
+        self.current_member = 0
+        self.building_cards = ft.Column(scroll="auto")
+        self.wonder_cards = ft.Column(scroll="auto")
+        self.member_buttons = {}
+        self.building_btns = {}
+        self.wonder_btns = {}
+        self._build_top_bar()
+        self._build_body()
+        self._build_bottom_bar()
+        self._refresh_all_ui()
+        self.page.run_task(self._update_loop)
 
-        self._last_building_snap = {}
-        self._last_farm_snap = None
-        self._last_factory_snap = None
-        self.setup_ui()
-        self.refresh_ui()
-        self.update_thread = threading.Thread(target=self.update_loop, daemon=True)
-        self.update_thread.start()
+    def _ref(self, key, ctrl):
+        self._refs[key] = ctrl
+        return ctrl
 
-    # ──────────────── UI Setup ────────────────
+    # ─── Top Bar ────────────────────────────────────────────────
+    def _build_top_bar(self):
+        ab = ft.AppBar(title=ft.Text("\u2694 \u52c7\u8005\u5de5\u574a v5.1", size=18, weight=ft.FontWeight.BOLD))
+        self._ref("kills_label", ft.Text("\u51fb\u6740: 0", size=13, color=Cs("GREY_500")))
+        self._ref("gold_label", ft.Text("\U0001fa99 100", size=15, weight=ft.FontWeight.BOLD, color="#B8860B"))
+        ab.actions = [
+            self._refs["kills_label"],
+            ft.Container(width=20),
+            self._refs["gold_label"],
+            ft.Container(width=10),
+        ]
+        self.page.appbar = ab
 
-    def setup_ui(self):
-        # ── Top bar ──
-        top = tk.Frame(self.root, relief="groove", bd=1)
-        top.pack(fill="x", pady=0)
-        tk.Label(top, text="\u2694 勇者工坊 v3.0",
-                 font=("Arial", 15, "bold")).pack(side="left", padx=15, pady=6)
-        self.gold_label = tk.Label(top, text="\U0001FA99 100",
-                                   font=("Arial", 14, "bold"), fg="#B8860B")
-        self.gold_label.pack(side="right", padx=15, pady=6)
-        self.kills_label = tk.Label(top, text="击杀: 0",
-                                    font=("Arial", 10), fg="#888")
-        self.kills_label.pack(side="right", padx=10, pady=6)
+    # ─── Body ──────────────────────────────────────────────────
+    def _build_body(self):
+        self.body = ft.Row(
+            controls=[self._build_left(), self._build_center(), self._build_right()],
+            spacing=4, expand=True,
+        )
+        self.page.add(self.body)
 
-        # ── Main body (PanedWindow for resizable) ──
-        self.pw = tk.PanedWindow(self.root, orient="horizontal", sashwidth=4)
-        self.pw.pack(fill="both", expand=True, padx=4, pady=4)
+    # ─── Left Panel ─────────────────────────────────────────────
+    def _build_left(self):
+        col = ft.Column(spacing=0, scroll="auto", expand=True)
 
-        # Left panel
-        left_container = tk.Frame(self.pw)
-        self.pw.add(left_container, minsize=220, width=260)
-        self._build_left(left_container)
+        # Resources
+        col.controls.append(ft.Container(
+            content=ft.Column([
+                ft.Text("\U0001f4e6 \u8d44\u6e90", size=14, weight=ft.FontWeight.BOLD, color=Cs("GREY_700")),
+                ft.Divider(height=1),
+            ], spacing=4),
+            padding=ft.Padding.all(8),
+            border=ft.Border.all(1, Cs("OUTLINE")),
+            border_radius=6,
+            margin=ft.Margin.only(right=4, bottom=4),
+        ))
 
-        # Center panel
-        center_container = tk.Frame(self.pw)
-        self.pw.add(center_container, minsize=280, width=310)
-        self._build_center(center_container)
+        MATERIALS = [("\u6728\u6750", "\U0001f332"), ("\u94c1\u77ff", "\u26cf\ufe0f"),
+                     ("\u76ae\u9769", "\U0001f9e4"), ("\u77f3\u5934", "\u26f0\ufe0f")]
+        for name, icon in MATERIALS:
+            col.controls.append(ft.Row([
+                ft.Text(f"{icon} {name}:", size=13, expand=2),
+                self._ref(f"res_{name}", ft.Text("0", size=13, weight=ft.FontWeight.BOLD, expand=1)),
+                ft.IconButton(icon=I.REMOVE, icon_size=15, on_click=lambda e, n=name: self._sell_mat(n)),
+                ft.Text("\xd7", size=12),
+                ft.IconButton(icon=I.ADD, icon_size=15, on_click=lambda e, n=name: self._buy_mat(n)),
+            ], spacing=2, tight=True))
 
-        # Right panel
-        right_container = tk.Frame(self.pw)
-        self.pw.add(right_container, minsize=300, width=400)
-        self._build_right(right_container)
-
-        # ── Bottom: Inventory grid ──
-        self._build_inventory()
-
-        # ── Bottom bar ──
-        bar = tk.Frame(self.root, relief="groove", bd=1)
-        bar.pack(fill="x")
-        tk.Button(bar, text="存档", command=self.save_game,
-                  bg="#5B9BD5", fg="white", font=("Arial", 9),
-                  relief="groove", padx=12).pack(side="left", padx=8, pady=4)
-        tk.Button(bar, text="读档", command=self.load_game,
-                  bg="#5B9BD5", fg="white", font=("Arial", 9),
-                  relief="groove", padx=12).pack(side="left", padx=4, pady=4)
-        tk.Button(bar, text="帮助", command=self.show_help,
-                  bg="#999", fg="white", font=("Arial", 9),
-                  relief="groove", padx=12).pack(side="right", padx=8, pady=4)
-
-    # ── Left: 资源 + 建筑 + 奇观 (scrollable) ──
-    def _build_left(self, parent):
-        # Canvas + scrollbar for entire left panel
-        canvas = tk.Canvas(parent, highlightthickness=0)
-        vsb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=vsb.set)
-        vsb.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-
-        inner = tk.Frame(canvas)
-        canvas.create_window((0, 0), window=inner, anchor="nw")
-
-        def on_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            # Also resize inner frame width to match canvas
-            canvas.itemconfigure(canvas.find_withtag("all")[0], width=event.width)
-        canvas.bind("<Configure>", on_configure)
-
-        # Enable mousewheel
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
-        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
-
-        self._left_canvas = canvas
-        self._left_inner = inner
-
-        # 资源
-        rf = ttk.LabelFrame(inner, text="\U0001F4E6 资源", padding=6)
-        rf.pack(fill="x", padx=4, pady=(6, 3))
-        self.res_labels = {}
-        self.res_buy_entries = {}
-        MATERIALS = [("木材", "\U0001F332", 4), ("铁矿", "\u2692", 6), 
-                     ("皮革", "\U0001F9B4", 4), ("石头", "\u26F0", 2)]
-        for res, emoji, buy_price in MATERIALS:
-            row = tk.Frame(rf)
-            row.pack(fill="x", pady=2)
-            tk.Label(row, text=f"{emoji} {res}:", font=("Arial", 10),
-                     width=10, anchor="w").pack(side="left")
-            self.res_labels[res] = tk.Label(row, text="0", font=("Arial", 10, "bold"),
-                                            fg="#333", anchor="w", width=6)
-            self.res_labels[res].pack(side="left")
-            
-            # 购买/出售 buttons
-            tk.Button(row, text="买", font=("Arial", 7), bg="#4CAF50", fg="white",
-                      width=2, relief="raised",
-                      command=lambda r=res: self.buy_material(r)).pack(side="left", padx=1)
-            tk.Button(row, text="卖", font=("Arial", 7), bg="#FF9800", fg="white",
-                      width=2, relief="raised",
-                      command=lambda r=res: self.sell_material(r)).pack(side="left", padx=1)
-            self.res_buy_entries[res] = tk.Entry(row, width=3, font=("Arial", 8))
-            self.res_buy_entries[res].insert(0, "10")
-            self.res_buy_entries[res].pack(side="left", padx=2)
-
-        # 建筑
-        bf = ttk.LabelFrame(inner, text="\U0001F3D7 建筑", padding=6)
-        bf.pack(fill="x", padx=4, pady=3)
-        self.building_widgets = {}
+        # Buildings
+        col.controls.append(ft.Container(
+            content=ft.Text("\U0001f3d7 \u5efa\u7b51", size=14, weight=ft.FontWeight.BOLD, color=Cs("GREY_700")),
+            padding=ft.Padding.only(left=4, top=10, bottom=4),
+        ))
+        self.building_cards = ft.Column(spacing=4, scroll="auto")
+        col.controls.append(self.building_cards)
         for bname in get_all_building_names():
-            bframe = tk.Frame(bf, relief="groove", bd=1)
-            bframe.pack(fill="x", pady=4, ipady=4)
+            self.building_cards.controls.append(self._build_building_card(bname))
 
-            hdr = tk.Frame(bframe)
-            hdr.pack(fill="x", padx=6)
-            tk.Label(hdr, text=bname, font=("Arial", 10, "bold")).pack(side="left")
-            count_lbl = tk.Label(hdr, text="x0", font=("Arial", 9), fg="#888")
-            count_lbl.pack(side="right")
+        # Wonders
+        col.controls.append(ft.Container(
+            content=ft.Text("\u2728 \u5947\u89c2", size=14, weight=ft.FontWeight.BOLD, color=Cs("GREY_700")),
+            padding=ft.Padding.only(left=4, top=8, bottom=4),
+        ))
+        self.wonder_cards = ft.Column(spacing=3, scroll="auto")
+        col.controls.append(self.wonder_cards)
+        for wname in get_wonder_names():
+            self.wonder_cards.controls.append(self._build_wonder_card(wname))
 
-            info_lbl = tk.Label(bframe, text="not built", font=("Arial", 8), fg="#aaa")
-            info_lbl.pack(anchor="w", padx=6)
+        return ft.Container(content=col, width=230, padding=4, bgcolor=Cs("SURFACE_CONTAINER_LOWEST"))
 
-            build_btn = tk.Button(bframe, text="建造",
-                                  command=lambda n=bname: self.build_building(n),
-                                  bg="#4CAF50", fg="white", font=("Arial", 9),
-                                  relief="groove", padx=8)
-            build_btn.pack(fill="x", padx=6, pady=(2, 0))
+    def _build_building_card(self, name):
+        return ft.Column([
+            ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Text(name, size=13, weight=ft.FontWeight.BOLD, expand=True),
+                        self._ref(f"bld_count_{name}", ft.Text("x0", size=12, color=Cs("GREY_500"))),
+                    ]),
+                    self._ref(f"bld_info_{name}", ft.Text("\u672a\u5efa\u9020", size=11, color=Cs("GREY_400"))),
+                    ft.Row([
+                        ft.Button("\u5efa\u9020", scale=0.8, on_click=lambda e, n=name: self._build_building(n)),
+                        self._ref(f"bld_upg_btn_{name}",
+                                  ft.OutlinedButton("\u5347\u7ea7", scale=0.8,
+                                                    on_click=lambda e, n=name: self._upgrade_building(n))),
+                    ], spacing=4),
+                ], spacing=3),
+                padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=6,
+            ),
+            ft.Container(
+                content=ft.Row([
+                    ft.Text("\u5de5\u4eba:", size=11, expand=1),
+                    self._ref(f"worker_count_{name}", ft.Text("0/0", size=11, color=Cs("GREY_500"))),
+                    ft.IconButton(icon=I.ADD, icon_size=14, on_click=lambda e, n=name: self._hire_worker(n)),
+                    ft.Text("\u2715", size=11),
+                    ft.IconButton(icon=I.REMOVE, icon_size=14, on_click=lambda e, n=name: self._fire_worker(n)),
+                ], spacing=2, tight=True),
+                padding=ft.Padding.only(left=6, right=6, bottom=4),
+                bgcolor="#f5f5f5",
+                border_radius=4,
+            ),
+        ], spacing=2)
 
-            upgrade_frame = tk.Frame(bframe)
-            upgrade_frame.pack(fill="x", padx=6, pady=(2, 4))
+    # ─── Center Panel ───────────────────────────────────────────
+    def _build_wonder_card(self, name):
+        wonder_btn = ft.Button("\u5efa\u9020\u5947\u89c2", scale=0.9, on_click=lambda e, n=name: self._build_wonder(n))
+        self.wonder_btns[name] = wonder_btn
+        return ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Text(name, size=13, weight=ft.FontWeight.BOLD, expand=True),
+                    self._ref(f"wonder_count_{name}", ft.Text("x0", size=12, color=Cs("GREY_500"))),
+                ]),
+                self._ref(f"wonder_info_{name}", ft.Text("\u672a\u5efa\u9020", size=11, color=Cs("GREY_400"))),
+                ft.Container(
+                    content=wonder_btn,
+                    alignment=ft.alignment.Alignment(0.5, 0.5),
+                ),
+            ], spacing=3),
+            padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=6,
+        )
 
-            self.building_widgets[bname] = {
-                "count": count_lbl,
-                "info": info_lbl,
-                "upgrade_frame": upgrade_frame,
-            }
+    def _build_center(self):
+        col = ft.Column(spacing=4, scroll="auto", expand=True)
 
-        # 奇观
-        wf = ttk.LabelFrame(inner, text="\u2728 奇观", padding=6)
-        wf.pack(fill="x", padx=4, pady=3)
-        self.wonder_buttons = {}
-        for wn in get_wonder_names():
-            btn = tk.Button(wf, text=wn, command=lambda w=wn: self.build_wonder(w),
-                           font=("Arial", 9), bg="#FFF8DC", fg="#333",
-                           relief="groove", anchor="w", padx=10)
-            btn.pack(fill="x", pady=2)
-            self.wonder_buttons[wn] = btn
-
-    # ── Center: Hero + 地图 + Battle ──
-    def _build_center(self, parent):
-        # 队伍切换面板
-        team_frame = ttk.LabelFrame(parent, text="\U0001F465 队伍", padding=6)
-        team_frame.pack(fill="x", padx=4, pady=(4, 3))
-
-        self.team_btn_vars = []   # 每个成员的按钮变量
-        self.team_name_labels = []
-        self.team_hp_labels = []
-        self.team_level_labels = []
+        # Team row
+        team_row = ft.Row(spacing=4)
+        self.team_btns = []
         for i in range(3):
-            bg = "#4CAF50" if i == 0 else ("#1565C0" if i == 1 else "#6A1B9A")
-            fg = "white"
-            name_var = tk.StringVar(value="---")
-            hp_var = tk.StringVar(value="--/--")
-            lvl_var = tk.StringVar(value="")
-            btn = tk.Button(team_frame, textvariable=name_var,
-                           command=lambda idx=i: self._switch_member(idx),
-                           font=("Arial", 9, "bold"), bg=bg, fg=fg,
-                           relief="groove", padx=6, pady=2, width=12)
-            btn.pack(side="left", padx=3)
-            hp_lbl = tk.Label(team_frame, textvariable=hp_var, font=("Arial", 8), width=9, anchor="w")
-            hp_lbl.pack(side="left", padx=2)
-            lvl_lbl = tk.Label(team_frame, textvariable=lvl_var, font=("Arial", 8), width=6, anchor="w")
-            lvl_lbl.pack(side="left", padx=2)
-            self.team_btn_vars.append(btn)
-            self.team_name_labels.append(name_var)
-            self.team_hp_labels.append(hp_var)
-            self.team_level_labels.append(lvl_var)
+            btn = ft.Button(
+                "\u2026" * 3, width=110,
+                on_click=lambda e, idx=i: self._switch_member(idx)
+            )
+            self.team_btns.append(btn)
+            team_row.controls.append(btn)
+        team_row.controls.append(
+            ft.Button("\U0001f37a \u9152\u9986", on_click=self._open_tavern_tab, scale=0.9)
+        )
+        col.controls.append(ft.Container(
+            content=ft.Column([
+                ft.Text("\U0001f465 \u961f\u4f0d", size=14, weight=ft.FontWeight.BOLD),
+                team_row,
+            ], spacing=4),
+            padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=6,
+        ))
 
-        # 酒馆快捷入口
-        tk.Button(team_frame, text="🍺 酒馆",
-                  command=self._open_tavern_tab,
-                  font=("Arial", 9), bg="#8D6E63", fg="white",
-                  relief="groove", padx=8).pack(side="right", padx=4)
+        # Hero stats
+        self.hero_stats = ft.Column(spacing=1)
+        col.controls.append(ft.Container(
+            content=ft.Column([
+                self._ref("hero_name_lbl", ft.Text("\U0001f9d9 \u52c7\u8005 Lv.1", size=14, weight=ft.FontWeight.BOLD)),
+                self.hero_stats,
+            ], spacing=2),
+            padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=6,
+        ))
+        self._init_hero_stats()
 
-        # Hero stats（跟随当前选中成员）
-        hf = self.hero_lbl_frame = ttk.LabelFrame(parent, text="\U0001F9D1 英雄属性", padding=8)
-        hf.pack(fill="x", padx=4, pady=(4, 3))
+        # Map + Enemy
+        map_btns_row = ft.Row(wrap=True, spacing=4)
+        for mname in get_all_maps().keys():
+            btn = ft.Button(mname, scale=0.85, on_click=lambda e, m=mname: self._change_map(m),
+                                     style=ft.ButtonStyle(bgcolor=Cs("BLUE_600"), color=ft.Colors.WHITE))
+            map_btns_row.controls.append(btn)
+            self._ref(f"map_btn_{mname}", btn)
 
-        self.hp_var = tk.StringVar(value="生命: 100/100")
-        self.attack_var = tk.StringVar(value="攻击: 10")
-        self.defense_var = tk.StringVar(value="防御: 5")
-        self.crit_var = tk.StringVar(value="CRIT: 0%")
-        self.level_var = tk.StringVar(value="Lv.1")
-        self.exp_var = tk.StringVar(value="经验: 0/100")
-        self.weapon_var = tk.StringVar(value="武器: None")
-        self.armor_var = tk.StringVar(value="护甲: None")
-
-        for var in [self.level_var, self.exp_var, self.hp_var,
-                    self.attack_var, self.defense_var, self.crit_var,
-                    self.weapon_var, self.armor_var]:
-            tk.Label(hf, textvariable=var, font=("Arial", 10),
-                     anchor="w").pack(fill="x", padx=4, pady=1)
-
-        # 地图
-        mf = ttk.LabelFrame(parent, text="\U0001F5FA 地图", padding=8)
-        mf.pack(fill="x", padx=4, pady=3)
-
-        self.map_var = tk.StringVar(value="\u50B2\u6765\u56FD")
-        tk.Label(mf, textvariable=self.map_var, font=("Arial", 11, "bold"), width=18,
-                 fg="#1565C0", anchor="center").pack(pady=2)
-
-        # 地图按钮区：Canvas + 水平滚动条
-        map_canvas_frame = tk.Frame(mf)
-        map_canvas_frame.pack(fill="x", pady=4)
-        map_canvas = tk.Canvas(map_canvas_frame, height=36, highlightthickness=0)
-        hscroll = ttk.Scrollbar(map_canvas_frame, orient="horizontal", command=map_canvas.xview)
-        map_canvas.configure(xscrollcommand=hscroll.set)
-        hscroll.pack(side="bottom", fill="x")
-        map_canvas.pack(side="top", fill="x")
-        self.map_btn_inner = tk.Frame(map_canvas)
-        map_canvas.create_window((0, 0), window=self.map_btn_inner, anchor="nw")
-        self.map_btn_inner.bind("<Configure>",
-                                lambda e: map_canvas.configure(scrollregion=map_canvas.bbox("all")))
-        self.map_buttons = {}
-        for mn in get_all_maps().keys():
-            btn = tk.Button(self.map_btn_inner, text=mn, command=lambda m=mn: self.change_map(m),
-                           font=("Arial", 8), relief="groove", padx=6)
-            btn.pack(side="left", padx=2, pady=2)
-            self.map_buttons[mn] = btn
-
-        # 敌人
-        ef = ttk.LabelFrame(parent, text="💀 敌人", padding=8)
-        ef.pack(fill="x", padx=4, pady=3)
-
-        self.enemy_var = tk.StringVar(value="???")
-        tk.Label(ef, textvariable=self.enemy_var, font=("Arial", 11, "bold"),
-                 fg="#C62828").pack(pady=2)
-        
-        # 刷新敌人按钮
-        self.refresh_btn = tk.Button(ef, text="🔄 刷新敌人",
-                                     command=self.do_refresh_enemy,
-                                     font=("Arial", 9), bg="#9E9E9E",
-                                     fg="white", relief="groove", width=12)
-        self.refresh_btn.pack(pady=2)
+        col.controls.append(ft.Container(
+            content=ft.Column([
+                ft.Text("\U0001f5fa \u5730\u56fe", size=14, weight=ft.FontWeight.BOLD),
+                self._ref("map_lbl", ft.Text("\u50b2\u6765\u56fd", size=13, color=Cs("BLUE_700"))),
+                map_btns_row,
+                ft.Divider(),
+                self._ref("enemy_display",
+                          ft.Text("\U0001f480 ??? HP:?? ATK:??", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_800)),
+                ft.Row([
+                    ft.Button("\U0001f504 \u5237\u65b0\u654c\u4eba", on_click=self._refresh_enemy),
+                    self._ref("refresh_cost_lbl", ft.Text("", size=12)),
+                ], spacing=4),
+            ], spacing=4),
+            padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=6,
+        ))
 
         # Battle buttons
-        btn_area = tk.Frame(parent)
-        btn_area.pack(pady=6)
-
-        self.battle_btn = tk.Button(btn_area, text="\u2694 战斗",
-                                    command=self.do_battle,
-                                    font=("Arial", 12, "bold"), bg="#2196F3",
-                                    fg="white", relief="groove", width=16, pady=4)
-        self.battle_btn.pack(pady=3)
-
-        self.auto_btn = tk.Button(btn_area, text="\u26A1 自动战斗",
-                                  command=self.toggle_auto,
-                                  font=("Arial", 10), bg="#FF9800",
-                                  fg="white", relief="groove", width=16, pady=2)
-        self.auto_btn.pack(pady=3)
-        self.auto_label = tk.Label(btn_area, text="自动: 关", fg="#999",
-                                   font=("Arial", 9))
-        self.auto_label.pack()
-
-        # 药水
-        pot_area = ttk.LabelFrame(parent, text="\U0001F9EA 药水", padding=6)
-        pot_area.pack(fill="x", padx=4, pady=3)
-        self.potions_var = tk.StringVar(value="x0")
-        tk.Button(pot_area, text="购买 (25G)", command=self.do_buy_potion,
-                  bg="#4CAF50", fg="white", font=("Arial", 9),
-                  relief="groove", padx=8).pack(side="left", padx=4)
-        tk.Label(pot_area, textvariable=self.potions_var,
-                 font=("Arial", 11, "bold")).pack(side="left", padx=8)
-        tk.Button(pot_area, text="使用 (+20HP)", command=self.do_use_potion,
-                  bg="#E91E63", fg="white", font=("Arial", 9),
-                  relief="groove", padx=8).pack(side="left", padx=4)
-
-        # Auto-potion setting
-        ap_area = ttk.LabelFrame(parent, text="\U0001F9EA 自动药水", padding=6)
-        ap_area.pack(fill="x", padx=4, pady=3)
-        tk.Label(ap_area, text="当 HP < ", font=("Arial", 9)).pack(side="left", padx=2)
-        self.auto_potion_var = tk.StringVar(value="OFF")
-        ap_combo = ttk.Combobox(ap_area, textvariable=self.auto_potion_var,
-                                values=["OFF", "30%", "50%", "80%"],
-                                state="readonly", width=5, font=("Arial", 9))
-        ap_combo.pack(side="left", padx=4)
-        ap_combo.bind("<<ComboboxSelected>>", self._on_auto_potion_change)
-        self.auto_potion_label = tk.Label(ap_area, text="",
-                                          font=("Arial", 8), fg="#888")
-        self.auto_potion_label.pack(side="left", padx=4)
-
-        # 日志面板
-        log_frame = ttk.LabelFrame(parent, text="\U0001F4DD 战斗日志", padding=4)
-        log_frame.pack(fill="both", expand=True, padx=4, pady=3)
-
-        scroll_y = ttk.Scrollbar(log_frame)
-        scroll_y.pack(side="right", fill="y")
-        self.log_listbox = tk.Listbox(log_frame, height=6,
-                                       font=("Consolas", 9),
-                                       yscrollcommand=scroll_y.set,
-                                       relief="groove", bg="#f5f5f5")
-        self.log_listbox.pack(fill="both", expand=True)
-        scroll_y.config(command=self.log_listbox.yview)
-
-    # ── Right: Shop tabs ──
-    def _build_right(self, parent):
-        nb = ttk.Notebook(parent)
-        nb.pack(fill="both", expand=True)
-
-        wtab = tk.Frame(nb)
-        nb.add(wtab, text=" \u2694 武器 ")
-        self._build_shop(wtab, WEAPONS, "weapon")
-
-        atab = tk.Frame(nb)
-        nb.add(atab, text=" \U0001F6E1 Armor ")
-        self._build_shop(atab, ARMORS, "armor")
-
-        # Novelty shop tab
-        ntab = tk.Frame(nb)
-        nb.add(ntab, text=" \U0001F3FA Novelty ")
-        self._build_novelty_shop(ntab)
-
-        # ── Farm Tab ──
-        # Tavern Tab
-        ttab = tk.Frame(nb)
-        nb.add(ttab, text="\U0001F37A Tavern ")
-        self._build_tavern_tab(ttab)
-
-        self.farm_tab = tk.Frame(nb)
-        nb.add(self.farm_tab, text=" \U0001F31F Farm ")
-        self._build_farm_tab(self.farm_tab)
-
-        # ── 工厂 Tab ──
-        self.factory_tab = tk.Frame(nb)
-        nb.add(self.factory_tab, text=" \U0001F3ED 工厂 ")
-        self._build_factory_tab(self.factory_tab)
-
-    def _build_shop(self, parent, items, kind):
-        canvas = tk.Canvas(parent, highlightthickness=0)
-        vsb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        inner = tk.Frame(canvas)
-        canvas.configure(yscrollcommand=vsb.set)
-        vsb.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-        canvas.create_window((0, 0), window=inner, anchor="nw")
-        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
-        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
-
-        for item in items:
-            if kind == "weapon":
-                crit = f" CRIT{item['crit_rate']}%" if item["crit_rate"] > 0 else ""
-                text = f"{item['name']}  ATK:{item['attack']}{crit}  ({self._cost_str(item['cost'])})"
-                color = "#7B1FA2"
-            else:
-                hp = f" HP+{item['hp_bonus']}" if item["hp_bonus"] > 0 else ""
-                text = f"{item['name']}  DEF:{item['defense']}{hp}  ({self._cost_str(item['cost'])})"
-                color = "#512DA8"
-
-            btn = tk.Button(inner, text=text,
-                           command=lambda i=item, k=kind: self.buy_equipment(i, k),
-                           font=("Consolas", 9), bg=color, fg="white",
-                           anchor="w", relief="groove", padx=10, pady=3)
-            btn.pack(fill="x", pady=1, padx=4)
-
-    @staticmethod
-    def _cost_str(cost):
-        if not cost:
-            return "Free"
-        m = {"金币": "金", "木材": "木", "铁矿": "铁", "皮革": "皮", "石头": "石"}
-        return " ".join(f"{m.get(k, k)}{v}" for k, v in cost.items())
-
-    # ── Novelty Shop ──
-    def _build_novelty_shop(self, parent):
-        canvas = tk.Canvas(parent, highlightthickness=0)
-        sb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=sb.set)
-        sb.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-
-        inner = tk.Frame(canvas, padx=6, pady=6)
-        canvas.create_window((0, 0), window=inner, anchor="nw")
-
-        def _on_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-        canvas.bind("<Configure>", _on_configure)
-
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
-        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
-
-        # Sort items by price
-        sorted_items = sorted(NOVELTY_ITEMS, key=lambda x: x["price"])
-
-        for item in sorted_items:
-            price = item["price"]
-            rarity_idx = 0 if price <= 8 else (1 if price <= 20 else (2 if price <= 38 else (3 if price <= 55 else 4)))
-            color = NOVELTY_RARITY_COLORS[rarity_idx]
-            rarity_name = NOVELTY_RARITY_NAMES[rarity_idx]
-
-            frame = tk.Frame(inner, relief="groove", bd=1)
-            frame.pack(fill="x", pady=2, padx=4)
-
-            # Icon + name + price
-            top_row = tk.Frame(frame)
-            top_row.pack(fill="x", padx=6, pady=4)
-            tk.Label(top_row, text=item["name"], font=("Arial", 10, "bold"),
-                     fg=color, anchor="w").pack(side="left")
-            tk.Label(top_row, text=f"{rarity_name} · {price}G", font=("Arial", 8),
-                     fg="#999", anchor="e").pack(side="right")
-
-            # Desc
-            tk.Label(frame, text=item["desc"], font=("Arial", 8),
-                     fg="#666", anchor="w").pack(fill="x", padx=6, pady=(0, 4))
-
-            # 购买 button
-            tk.Button(frame, text="购买", command=lambda it=item: self.buy_novelty(it),
-                      bg=color, fg="white", font=("Arial", 8, "bold"),
-                      relief="groove", padx=8).pack(side="right", padx=6, pady=4)
-
-    def buy_novelty(self, item):
-        ok, msg = self.game.buy_novelty_item(item)
-        self.game.add_log(msg)
-        self.refresh_ui()
-
-    # ═══════════════════ Farm ═══════════════════
-    def _build_farm_tab(self, parent):
-        from modules.plants import get_plant_catalog, PLANT_RARITY_COLORS, PLANT_RARITY_NAMES
-
-        top = tk.Frame(parent)
-        top.pack(fill="x", padx=6, pady=4)
-
-        tk.Label(top, text="🌱 我的农场", font=("Arial", 11, "bold")).pack(side="left")
-        self.farm_info_lbl = tk.Label(top, text="0/10 plants",
-                                       font=("Arial", 10), fg="#555")
-        self.farm_info_lbl.pack(side="right")
-
-        # Plant list frame (scrollable)
-        list_frame = tk.Frame(parent)
-        list_frame.pack(fill="both", expand=True, padx=6, pady=2)
-        self.farm_plant_frames = []
-        self.farm_plant_canvas = tk.Canvas(list_frame, highlightthickness=0)
-        farm_sb = ttk.Scrollbar(list_frame, orient="vertical", command=self.farm_plant_canvas.yview)
-        farm_inner = tk.Frame(self.farm_plant_canvas)
-        farm_inner.bind("<Configure>",
-                        lambda e: self.farm_plant_canvas.configure(scrollregion=self.farm_plant_canvas.bbox("all")))
-        self.farm_plant_canvas.create_window((0, 0), window=farm_inner, anchor="nw")
-        self.farm_plant_canvas.configure(yscrollcommand=farm_sb.set)
-        self.farm_plant_canvas.pack(side="left", fill="both", expand=True)
-        farm_sb.pack(side="right", fill="y")
-        self.farm_plant_inner = farm_inner
-
-        # Seed shop (scrollable)
-        shop_lbl_frame = ttk.LabelFrame(parent, text="种子商店", padding=6)
-        shop_lbl_frame.pack(fill="x", padx=6, pady=4)
-        shop_container = tk.Frame(shop_lbl_frame)
-        shop_container.pack(fill="x")
-        self.farm_seed_canvas = tk.Canvas(shop_container, highlightthickness=0, height=160)
-        shop_sb = ttk.Scrollbar(shop_container, orient="vertical", command=self.farm_seed_canvas.yview)
-        self.farm_seed_inner = tk.Frame(self.farm_seed_canvas)
-        self.farm_seed_inner.bind("<Configure>",
-            lambda e: self.farm_seed_canvas.configure(
-                scrollregion=self.farm_seed_canvas.bbox("all")))
-        self.farm_seed_canvas.create_window((0, 0), window=self.farm_seed_inner, anchor="nw")
-        self.farm_seed_canvas.configure(yscrollcommand=shop_sb.set)
-        self.farm_seed_canvas.pack(side="left", fill="x", expand=True)
-        shop_sb.pack(side="right", fill="y")
-
-        catalog = get_plant_catalog()
-        for pd in catalog:
-            rc = PLANT_RARITY_COLORS.get(pd["rarity"], "#888")
-            price = pd["seed_price"]
-            text = (f"{pd['icon']} {pd['name']}  {pd['desc']}  "
-                    f"产{int(pd['harvest_gold'])}G/{int(pd['harvest_interval_s'])}s  "
-                    f"{PLANT_RARITY_NAMES.get(pd['rarity'],'')} [{price}G]")
-            btn = tk.Button(self.farm_seed_inner, text=text, font=("Consolas", 9), fg=rc,
-                            anchor="w", relief="groove", padx=8,
-                            command=lambda p=pd: self._plant_seed(p))
-            btn.pack(fill="x", pady=1)
-
-    def _plant_seed(self, pd):
-        ok, msg = self.game.plant_seed(pd["id"], cost_gold=pd["seed_price"])
-        self.game.add_log(msg)
-        self.refresh_farm_ui()
-
-    def refresh_farm_ui(self):
-        """刷新农场 UI（植物状态面板）"""
-        if not hasattr(self, "farm_plant_inner"):
-            return
-        plants = self.game.plants
-        self.farm_info_lbl.config(text=f"{len(plants)}/{getattr(__import__('modules.plants', fromlist=['MAX_PLANTS']), 'MAX_PLANTS')} plants")
-
-        # 快照：只记录植物数量和各植物关键状态
-        from modules.plants import get_plant_by_id, calc_grow_stage
-        now = time.time()
-        snap_parts = []
-        for plant in plants:
-            pd = get_plant_by_id(plant["plant_id"])
-            if not pd:
-                continue
-            elapsed = now - plant["planted_at"]
-            stage = calc_grow_stage(elapsed, pd["grow_time_s"])
-            snap_parts.append((plant["id"], stage, plant.get("harvest_count", 0)))
-        new_snap = (len(plants), tuple(snap_parts))
-
-        # 阶段变化才重建（生长阶段从0→1→2→3 会触发，但同阶段内不触发）
-        if new_snap == self._last_farm_snap:
-            return
-        self._last_farm_snap = new_snap
-
-        # Clear old frames
-        for w in self.farm_plant_inner.pack_slaves():
-            w.destroy()
-
-        from modules.plants import get_plant_by_id as _get, PLANT_RARITY_COLORS
-        if not plants:
-            tk.Label(self.farm_plant_inner, text="(no plants yet — buy seeds above)",
-                     font=("Arial", 9), fg="#aaa").pack(pady=8)
-            return
-
-        for plant in plants:
-            pd = get_plant_by_id(plant["plant_id"])
-            if not pd:
-                continue
-            status = self.game._plant_status(plant)
-            rc = PLANT_RARITY_COLORS.get(pd["rarity"], "#888")
-
-            frame = tk.Frame(self.farm_plant_inner, relief="groove", bd=1)
-            frame.pack(fill="x", pady=2, padx=2)
-
-            tk.Label(frame, text=f"{pd['icon']} {pd['name']}", font=("Arial", 10, "bold"), fg=rc)\
-                .pack(anchor="w", padx=6)
-            tk.Label(frame, text=f"  {status['stage_name']}  {status['progress']}  {status['time_left']}",
-                     font=("Consolas", 8), fg="#555").pack(anchor="w", padx=6)
-
-            if status["stage"] < 3:
-                remaining = status["remaining_s"]
-                cost = int(remaining * 0.5)
-                tk.Button(frame, text=f"⚡ 加速 ({cost}G)",
-                          font=("Arial", 8), bg="#FFF9C4", relief="groove",
-                          command=lambda p=plant["id"]: self._speedup(p))\
-                    .pack(anchor="e", padx=4, pady=2)
-
-    def _speedup(self, plant_id):
-        ok, msg = self.game.speedup_plant(plant_id)
-        self.game.add_log(msg)
-        self.refresh_farm_ui()
-
-    # ═══════════════════ 工厂 ═══════════════════
-    def _build_factory_tab(self, parent):
-        from modules.factory import FACTORY_BUILD_COST, DEPARTMENTS, MAX_FACTORY_WORKERS
-
-        top = tk.Frame(parent)
-        top.pack(fill="x", padx=6, pady=4)
-        tk.Label(top, text="🏭 工厂", font=("Arial", 11, "bold")).pack(side="left")
-        self.factory_status_lbl = tk.Label(top, text="not built",
-                                            font=("Arial", 10), fg="#c00")
-        self.factory_status_lbl.pack(side="right")
-
-        self.factory_body = tk.Frame(parent)
-        self.factory_body.pack(fill="both", expand=True, padx=6, pady=2)
-
-        self._refresh_factory_ui()
-
-    def _refresh_factory_ui(self):
-        """重建工厂 tab 内容"""
-        try:
-            if not hasattr(self, "factory_body"):
-                return
-
-            g = self.game
-            new_snap = (
-                g.factory is not None,
-                tuple(sorted(g.factory_departments)) if g.factory_departments else (),
-                g.factory_workers
-            )
-            if new_snap == self._last_factory_snap:
-                return
-            self._last_factory_snap = new_snap
-
-            for w in self.factory_body.pack_slaves():
-                w.destroy()
-
-            from modules.factory import FACTORY_BUILD_COST, FACTORY_WORKER_COST_GOLD, DEPARTMENTS, MAX_FACTORY_WORKERS, get_dept_by_id, calc_factory_bonus
-
-            g = self.game
-
-            if g.factory is None:
-                # 建造按钮
-                tk.Label(self.factory_body, text="工厂尚not built!",
-                         font=("Arial", 10), fg="#888").pack(pady=8)
-                cost_str = " ".join(f"{k}{v}" for k, v in FACTORY_BUILD_COST.items())
-                tk.Label(self.factory_body, text=f"费用: {cost_str}",
-                         font=("Consolas", 9), fg="#555").pack()
-                tk.Button(self.factory_body, text="🏗️ 建造 工厂",
-                          font=("Arial", 11, "bold"), bg="#1976D2", fg="white",
-                          relief="groove", command=self._build_factory).pack(pady=8)
-                return
-
-            # 工厂已建造
-            finfo = g.get_factory_info()
-            self.factory_status_lbl.config(
-                text=f"Profit: {finfo['profit_per_cycle']}G / {finfo['cycle_seconds']}s  ×{finfo['bonus_factor']:.2f}",
-                fg="#2E7D32")
-
-            # 部门列表
-            depts_frame = ttk.LabelFrame(self.factory_body, text="部门", padding=6)
-            depts_frame.pack(fill="x", pady=4)
-            for dept in DEPARTMENTS:
-                did = dept["id"]
-                built = did in g.factory_departments
-                cost_parts = [f"G{dept['cost_gold']}"] if dept["cost_gold"] > 0 else []
-                for k, v in dept["cost_resources"].items():
-                    cost_parts.append(f"{k}{v}")
-                cost_str = " | ".join(cost_parts) if cost_parts else "Free"
-                bg = "#E8F5E9" if built else "#ECEFF1"
-                text = f"{'✅' if built else '🔒'} {dept['name']} — {dept['desc']} [{cost_str}]"
-                cmd = (lambda d=dept: self._buy_dept(d["id"])) if not built else None
-                btn = tk.Button(depts_frame, text=text, font=("Consolas", 9), bg=bg,
-                                 fg="#333", anchor="w", relief="groove", padx=8,
-                                 command=cmd)
-                btn.pack(fill="x", pady=1)
-
-            # 劳工管理
-            workers_frame = ttk.LabelFrame(self.factory_body, text="劳工", padding=6)
-            workers_frame.pack(fill="x", pady=4)
-            tk.Label(workers_frame, text=f"数量: {finfo['worker_count']}/{MAX_FACTORY_WORKERS}  "
-                                         f"(每人+15%, {FACTORY_WORKER_COST_GOLD}G/人)",
-                     font=("Arial", 9), fg="#555").pack(anchor="w")
-            btns = tk.Frame(workers_frame)
-            btns.pack()
-            tk.Button(btns, text="+ Hire", font=("Arial", 9, "bold"), bg="#4CAF50", fg="white",
-                      command=self._hire_factory_worker).pack(side="left", padx=4)
-            tk.Button(btns, text="- Fire", font=("Arial", 9), bg="#F44336", fg="white",
-                      command=self._fire_factory_worker).pack(side="left", padx=4)
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            if hasattr(self, 'game'):
-                self.game.add_log(f"工厂 UI ERROR: {e}")
-
-    def _build_factory(self):
-        try:
-            ok, msg = self.game.build_factory()
-            self.game.add_log(msg)
-            self._refresh_factory_ui()
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            self.game.add_log(f"ERROR: {e}")
-
-    def _buy_dept(self, dept_id):
-        from modules.factory import get_dept_by_id
-        dept = get_dept_by_id(dept_id)
-        ok, msg = self.game.buy_department(dept_id)
-        self.game.add_log(msg)
-        self._refresh_factory_ui()
-
-    def _hire_factory_worker(self):
-        ok, msg = self.game.hire_factory_worker()
-        self.game.add_log(msg)
-        self._refresh_factory_ui()
-
-    def _fire_factory_worker(self):
-        ok, msg = self.game.fire_factory_worker()
-        self.game.add_log(msg)
-        self._refresh_factory_ui()
-
-    # ── Bottom: Inventory grid ──
-    def _build_inventory(self):
-        inv_outer = ttk.LabelFrame(self.root, text="\U0001F392 Inventory", padding=6)
-        inv_outer.pack(fill="x", padx=4, pady=2)
-
-        self.inv_count_label = tk.Label(inv_outer, text="0/20",
-                                        font=("Arial", 10, "bold"), fg="#666")
-        self.inv_count_label.pack(anchor="e")
-
-        grid_frame = tk.Frame(inv_outer)
-        grid_frame.pack(fill="x")
-
-        self.inv_slots = []
-        COLS = 5
+        col.controls.append(ft.Container(
+            content=ft.Column([
+                self._ref("battle_btn",
+                          ft.Button("\u2694 \u6218\u6597", width=200, height=45,
+                                            on_click=self._do_battle,
+                                            style=ft.ButtonStyle(bgcolor=Cs("BLUE_600")))),
+                self._ref("auto_btn",
+                          ft.Button("\u26a1 \u81ea\u52a8\u6218\u6597", width=200,
+                                            on_click=self._toggle_auto,
+                                            style=ft.ButtonStyle(bgcolor=Cs("ORANGE_600")))),
+                self._ref("auto_status_lbl",
+                          ft.Text("\u81ea\u52a8: \u5173", size=12, color=Cs("GREY_500"))),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
+            padding=4,
+        ))
+
+        # Auto potion threshold
+        thresh_opts = ["OFF", "30%", "50%", "80%"]
+        self._ref("auto_potion_dd", ft.Dropdown(
+            options=[ft.dropdown.Option(o) for o in thresh_opts],
+            value="OFF", width=80, height=32,
+        ))
+        self._ref("auto_potion_lbl", ft.Text("已关闭", size=12, color=Cs("GREY_500")))
+        # Potions
+        col.controls.append(ft.Container(
+            content=ft.Column([
+                ft.Text("\U0001f9ea \u836f\u6c34", size=14, weight=ft.FontWeight.BOLD),
+                ft.Row([
+                    ft.Button("\u8d2d\u4e70 (25G)", scale=0.85, on_click=self._buy_potion),
+                    self._ref("potions_lbl", ft.Text("x0", size=13)),
+                    ft.Button("\u4f7f\u7528 +20HP", scale=0.85, on_click=self._use_potion),
+                ], spacing=4),
+                ft.Row([
+                    ft.Text("\u81ea\u52a8 HP<", size=12),
+                    self._refs["auto_potion_dd"],
+                    self._refs["auto_potion_lbl"],
+                ], spacing=4, alignment=ft.MainAxisAlignment.START),
+            ], spacing=4),
+            padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=6,
+        ))
+
+        # Combat log
+        self.log_view = ft.ListView(expand=True, spacing=2, auto_scroll=True)
+        col.controls.append(ft.Container(
+            content=ft.Column([
+                ft.Text("\U0001f4cb \u6218\u6597\u65e5\u5fd7", size=14, weight=ft.FontWeight.BOLD),
+                ft.Container(content=self.log_view,
+                             border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
+                             border_radius=4, padding=4, expand=True, height=160),
+            ], spacing=4),
+            padding=4,
+        ))
+        self._restore_auto_potion_ui()
+        
+        # Add dropdown change handler after UI is built
+        def on_auto_potion_change(e):
+            self._on_auto_potion_change()
+        self._refs["auto_potion_dd"].on_change = on_auto_potion_change
+
+        return ft.Container(content=col, expand=True, padding=4, bgcolor=Cs("SURFACE_CONTAINER_LOWEST"))
+
+    def _init_hero_stats(self):
+        for key, default in [
+            ("hp_lbl", "\u751f\u547d: 100/100"),
+            ("atk_lbl", "\u653b\u51fb: 10"),
+            ("def_lbl", "\u9632\u5fa1: 5"),
+            ("crit_lbl", "CRIT: 0%"),
+            ("exp_lbl", "\u7ecf\u9a8c: 0/100"),
+            ("wpn_lbl", "\u6b66\u5668: None"),
+            ("arm_lbl", "\u62a4\u7532: None"),
+        ]:
+            self._ref(key, ft.Text(default, size=12))
+
+    # ─── Right Panel ─────────────────────────────────────────────
+    def _build_right(self):
+        self._tab_bar = ft.TabBar(
+            tabs=[
+                ft.Tab(label="\u2694 \u6b66\u5668"),
+                ft.Tab(label="\U0001f6e1 \u62a4\u7532"),
+                ft.Tab(label="\U0001f381 \u6742\u8d27"),
+                ft.Tab(label="\U0001f392 \u80cc\u5305"),
+                ft.Tab(label="\u2b50 \u6750\u6599"),
+                ft.Tab(label="\U0001f37a \u9152\u9986"),
+                ft.Tab(label="\U0001f331 \u519c\u573a"),
+                ft.Tab(label="\U0001f3ed \u5de5\u5382"),
+            ],
+        )
+        self._tab_contents = [
+            self._build_weapon_tab(),
+            self._build_armor_tab(),
+            self._build_novelty_tab(),
+            self._build_bag_tab(),
+            self._build_materials_tab(),
+            self._build_tavern_tab(),
+            self._build_farm_tab(),
+            self._build_factory_tab(),
+        ]
+        self._tab_view = ft.TabBarView(controls=self._tab_contents, expand=True)
+        self.right_tabs = ft.Tabs(
+            content=ft.Column([self._tab_bar, self._tab_view], spacing=0, expand=True),
+            length=8,
+            expand=True,
+        )
+        return ft.Container(content=self.right_tabs, expand=True, padding=4)
+
+    def _build_weapon_tab(self):
+        items = []
+        for w in WEAPONS:
+            crit = f" CRIT{w['crit_rate']}%" if w["crit_rate"] > 0 else ""
+            ridx = min(w.get("rarity_idx", 0), 4)
+            color = RARITY_COLORS[ridx]
+            items.append(ft.ListTile(
+                title=ft.Text(f"{w['name']}  ATK:{w['attack']}{crit}", size=12, color=color),
+                subtitle=ft.Text(cost_str(w["cost"]), size=11, color=Cs("GREY_500")),
+                trailing=ft.IconButton(icon=I.SHOPPING_CART,
+                                       on_click=lambda e, wpn=w: self._buy_weapon(wpn)),
+            ))
+        return ft.ListView(items, spacing=2, expand=True)
+
+    def _build_armor_tab(self):
+        items = []
+        for a in ARMORS:
+            hp = f" HP+{a['hp_bonus']}" if a["hp_bonus"] > 0 else ""
+            ridx = min(a.get("rarity_idx", 0), 4)
+            color = RARITY_COLORS[ridx]
+            items.append(ft.ListTile(
+                title=ft.Text(f"{a['name']}  DEF:{a['defense']}{hp}", size=12, color=color),
+                subtitle=ft.Text(cost_str(a["cost"]), size=11, color=Cs("GREY_500")),
+                trailing=ft.IconButton(icon=I.SHOPPING_CART,
+                                       on_click=lambda e, arm=a: self._buy_armor(arm)),
+            ))
+        return ft.ListView(items, spacing=2, expand=True)
+
+    def _build_novelty_tab(self):
+        items = []
+        for item in sorted(NOVELTY_ITEMS, key=lambda x: x["price"]):
+            ridx = min(item.get("rarity_idx", 0), 4)
+            color = NOVELTY_RARITY_COLORS[ridx]
+            items.append(ft.ListTile(
+                title=ft.Text(item["name"], size=12, color=color, weight=ft.FontWeight.BOLD),
+                subtitle=ft.Text(f"{NOVELTY_RARITY_NAMES[ridx]} \xb7 {item['desc']}", size=11),
+                trailing=ft.Text(f"{item['price']}G", size=12, weight=ft.FontWeight.BOLD),
+                on_click=lambda e, it=item: self._buy_novelty(it),
+            ))
+        return ft.ListView(items, spacing=2, expand=True)
+
+
+    def _build_bag_tab(self):
+        # 标题行
+        self._ref("bag_count_lbl", ft.Text("\u80cc\u5305: 0/20", size=13, weight=ft.FontWeight.BOLD))
+        title_row = ft.Row([
+            self._refs["bag_count_lbl"],
+            ft.Container(expand=True),
+            ft.Text("\u70b9\u51fb\u88c5\u5907\u540d\u7b31\u6253\u62d4\u6216\u5356\u51fa", size=11, color=Cs("GREY_500")),
+        ], spacing=8)
+
+        # 当前装备区
+        equip_ctr = ft.Column([
+            ft.Text("\u2014\u2014 \u5f53\u524d\u88c5\u5907 \u2014\u2014", size=13, weight=ft.FontWeight.BOLD),
+            ft.Row([
+                self._ref("eq_weapon_lbl", ft.Text("\u6b66\u5668: \u672a\u88c5\u5907", size=12)),
+                ft.Container(expand=True),
+                self._ref("eq_armor_lbl", ft.Text("\u62a4\u7532: \u672a\u88c5\u5907", size=12)),
+            ], spacing=12),
+        ], spacing=4)
+
+        # 背包格子 grid (4x5)
+        self._bag_cells = []
+        bag_grid = ft.GridView(
+            child_aspect_ratio=3.5,
+            spacing=4,
+            padding=4,
+        )
         for i in range(20):
-            row, col = divmod(i, COLS)
-            cell = tk.Frame(grid_frame, relief="groove", bd=1)
-            cell.grid(row=row, column=col, padx=2, pady=2, sticky="nsew")
+            ridx = i  # will be updated by _refresh_bag
+            cell = ft.Container(
+                content=ft.Column([
+                    self._ref(f"bag_lbl_{i}", ft.Text("\u7a7a", size=11, color=Cs("GREY_500"), text_align="center")),
+                    ft.Row([
+                        self._ref(f"bag_e_{i}", ft.Text("\u88c5", size=10)),
+                        self._ref(f"bag_s_{i}", ft.Text("\u5356", size=10)),
+                    ], spacing=2, alignment=ft.MainAxisAlignment.CENTER),
+                ], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
+                border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
+                border_radius=4,
+                padding=4,
+                ink=True,
+            )
+            # Store idx in bgcolor for use in callbacks
+            cell.data = i
+            cell.on_click = lambda e, idx=i: self._bag_cell_click(idx)
+            self._bag_cells.append(cell)
+            bag_grid.controls.append(cell)
 
-            lbl = tk.Label(cell, text="Empty", font=("Consolas", 8),
-                           fg="#aaa", width=20, height=1, anchor="w", padx=4)
-            lbl.pack(side="left", fill="x", expand=True)
+        return ft.ListView([
+            title_row,
+            equip_ctr,
+            ft.Divider(),
+            bag_grid,
+        ], spacing=6, expand=True)
 
-            type_lbl = tk.Label(cell, text="", font=("Arial", 8, "bold"),
-                                width=2, padx=1)
-            type_lbl.pack(side="left")
+    def _refresh_bag(self):
+        inv = self.game.get_current_member().get_inventory()
+        count = inv.count()
+        self._refs["bag_count_lbl"].value = f"\u80cc\u5305: {count}/20"
 
-            btn_e = tk.Button(cell, text="E", font=("Arial", 8, "bold"),
-                           bg="#4CAF50", fg="white", relief="raised", width=2, height=1,
-                           command=lambda idx=i: self.equip_item(idx))
-            btn_e.pack(side="left", padx=1)
-            
-            btn_s = tk.Button(cell, text="卖", font=("Arial", 8, "bold"),
-                           bg="#FF9800", fg="white", relief="raised", width=2, height=1,
-                           command=lambda idx=i: self.sell_item(idx))
-            btn_s.pack(side="left", padx=1)
+        # 当前装备
+        m = self.game.get_current_member()
+        wpn = m.weapon
+        arm = m.armor
+        self._refs["eq_weapon_lbl"].value = (f"\u6b66\u5668: {wpn['name']}" if wpn else "\u6b66\u5668: \u672a\u88c5\u5907")
+        self._refs["eq_armor_lbl"].value = (f"\u62a4\u7532: {arm['name']}" if arm else "\u62a4\u7532: \u672a\u88c5\u5907")
 
-            self.inv_slots.append({"lbl": lbl, "btn_e": btn_e, "btn_s": btn_s,
-                                   "type_lbl": type_lbl})
-
-        for c in range(COLS):
-            grid_frame.columnconfigure(c, weight=1)
-
-    # ──────────────── Actions ────────────────
-
-    def build_building(self, name):
-        ok, msg = self.game.build_building(name)
-        self.game.add_log(msg)
-        self.refresh_buildings()
-
-    def upgrade_building(self, name, idx):
-        ok, msg = self.game.upgrade_building(name, idx)
-        if not ok:
-            self.game.add_log(f"Warning: {msg}")
-        self.refresh_buildings()
-
-    def buy_equipment(self, item, kind):
-        if kind == "weapon":
-            ok, msg = self.game.buy_weapon(item)
-        else:
-            ok, msg = self.game.buy_armor(item)
-        if not ok:
-            self.game.add_log(f"Warning: {msg}")
-        self.refresh_ui()
-
-    def equip_item(self, idx):
-        result = self.game.player.equip_item(idx)
-        if result[0]:
-            equip, msg = result
-            self.game.add_log(f"Equipped: {equip['name']}")
-            if equip.get("special"):
-                self.game.add_log(f"  \u2728 {equip['special']['name']}+{equip['special']['value']}")
-        else:
-            self.game.add_log(f"Equip failed: {result[1]}")
-        self.refresh_ui()
-
-    def change_map(self, map_name):
-        if map_name in self.game.unlocked_maps:
-            ok, msg = self.game.change_map(map_name)
-            self.game.add_log(msg)
-            self.refresh_ui()
-        else:
-            ok, msg = self.game.unlock_map(map_name)
-            if ok:
-                self.game.add_log(msg)
-                self.game.change_map(map_name)
-                self.refresh_ui()
+        # 刷新格子
+        for i in range(20):
+            item = inv.get(i)
+            lbl = self._refs.get(f"bag_lbl_{i}")
+            if not lbl:
+                continue
+            if item:
+                t = item.get("type", "item")
+                if t == "weapon":
+                    lbl.value = item["name"][:6]
+                    lbl.color = Cs("BLUE_400")
+                elif t == "armor":
+                    lbl.value = item["name"][:6]
+                    lbl.color = Cs("GREEN_400")
+                elif t == "novelty":
+                    lbl.value = item["name"][:5]
+                    lbl.color = NOVELTY_RARITY_COLORS[min(item.get("rarity_idx", 0), 4)]
+                else:
+                    lbl.value = item.get("name", "?")[:6]
+                    lbl.color = Cs("GREY_300")
             else:
-                self.game.add_log(f"无法解锁: {msg}")
+                lbl.value = "\u7a7a"
+                lbl.color = Cs("GREY_500")
 
-    def do_refresh_enemy(self):
-        """刷新当前敌人"""
-        if self.game.is_battling:
-            self.game.add_log("战斗中无法刷新!")
+    def _bag_cell_click(self, idx):
+        inv = self.game.get_current_member().get_inventory()
+        item = inv.get(idx)
+        if not item:
+            self._show_toast("\u8be5\u6865\u4f4d\u4e3a\u7a7a")
             return
-        from modules.maps import get_random_enemy
+        item_type = item.get("type", "item")
+        if item_type == "weapon":
+            result = self.game.player.equip_item(idx)
+            if result[0]:
+                self.game.add_log(f"\u88c5\u5907\u6b66\u5668: {result[1]}")
+            else:
+                self.game.add_log(f"\u88c5\u5907\u5931\u8d25: {result[1]}")
+        elif item_type == "armor":
+            result = self.game.player.equip_item(idx)
+            if result[0]:
+                self.game.add_log(f"\u88c5\u5907\u62a4\u7532: {result[1]}")
+            else:
+                self.game.add_log(f"\u88c5\u5907\u5931\u8d25: {result[1]}")
+        elif item_type == "novelty":
+            # Show use/sell dialog
+            self._use_novelty_in_bag(idx)
+        else:
+            self._show_toast("\u6682\u4e0d\u80fd\u64cd\u4f5c\u8be5\u7269\u54c1")
+        self._refresh_bag()
+        self._refresh_all_ui()
+
+    def _use_novelty_in_bag(self, idx):
+        ok, msg = self.game.use_novelty_item(idx)
+        self.game.add_log(msg)
+        self._refresh_bag()
+
+    def _sell_bag_item(self, idx):
+        ok, msg = self.game.sell_inventory_item(idx)
+        self.game.add_log(msg)
+        self._refresh_bag()
+        self._refresh_all_ui()
+
+    def _build_materials_tab(self):
+        # 材料类型: Wood, Iron, Leather, Stone
+        mat_rows = []
+        mats = ["Wood", "Iron", "Leather", "Stone"]
+        mat_buy_prices = {"Wood": 4, "Iron": 6, "Leather": 4, "Stone": 2}
+        mat_sell_prices = {"Wood": 2, "Iron": 3, "Leather": 2, "Stone": 1}
+        mat_names_cn = {"Wood": "\u6728\u6750", "Iron": "\u94c1\u77ff", "Leather": "\u76ae\u9769", "Stone": "\u77f3\u5934"}
+        self._mat_buy_btns = {}
+        self._mat_sell_btns = {}
+        for mat in mats:
+            ctr = ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Text(mat_names_cn[mat], size=13, weight=ft.FontWeight.BOLD),
+                        self._ref(f"mat_{mat}_cnt", ft.Text("x0", size=12, color=Cs("GREY_400"))),
+                    ], spacing=8),
+                    ft.Row([
+                        ft.Text(f"\u5356: {mat_sell_prices[mat]}G / \u4e70: {mat_buy_prices[mat]}G", size=11, color=Cs("GREY_500")),
+                    ], spacing=12),
+                    ft.Row([
+                        self._ref(f"mat_{mat}_buy_10", ft.Button(f"\u4e7010({mat_buy_prices[mat]*10}G)", scale=0.75, on_click=lambda e, m=mat: self._buy_mat(m, 10))),
+                        self._ref(f"mat_{mat}_sell_10", ft.Button(f"\u535610({mat_sell_prices[mat]*10}G)", scale=0.75, on_click=lambda e, m=mat: self._sell_mat(m, 10))),
+                    ], spacing=6),
+                ], spacing=4),
+                border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
+                border_radius=6,
+                padding=8,
+            )
+            self._ref(f"mat_{mat}_ctr", ctr)
+            mat_rows.append(ctr)
+
+        return ft.ListView(mat_rows, spacing=8, padding=8, expand=True)
+
+    def _buy_mat(self, mat, amount):
+        ok, msg = self.game.buy_material(mat, amount)
+        self.game.add_log(msg)
+        self._refresh_all_ui()
+
+    def _sell_mat(self, mat, amount):
+        ok, msg = self.game.sell_material(mat, amount)
+        self.game.add_log(msg)
+        self._refresh_all_ui()
+
+    def _refresh_materials(self):
+        mats = ["Wood", "Iron", "Leather", "Stone"]
+        for mat in mats:
+            cnt_lbl = self._refs.get(f"mat_{mat}_cnt")
+            if cnt_lbl:
+                cnt_lbl.value = "x" + str(self.game.player.resources.get(mat, 0))
+
+
+    def _build_tavern_tab(self):
+        self._ref("tavern_gold_lbl",
+                  ft.Text("\U0001fa99 100G", size=13, weight=ft.FontWeight.BOLD))
+        self._ref("tavern_timer_lbl", ft.Text("\u5237\u65b0: --:--", size=12))
+        self._ref("tavern_roster_ctr", ft.Column([], spacing=4, scroll="auto"))
+        self._ref("team_manage_ctr", ft.Column([], spacing=4, scroll="auto"))
+        ctr = ft.Column([
+            ft.Container(
+                content=ft.Row([
+                    self._refs["tavern_gold_lbl"],
+                    self._refs["tavern_timer_lbl"],
+                    ft.Container(expand=True),
+                    ft.Button("\U0001f504 \u5237\u65b0 (50G)", scale=0.85,
+                                       on_click=self._tavern_refresh),
+                ], spacing=8),
+                padding=6, bgcolor=Cs("BROWN_900"),
+            ),
+            ft.Text("\u2014\u2014 \u53ef\u62db\u52df\u89d2\u8272 \u2014\u2014",
+                    size=13, weight=ft.FontWeight.BOLD),
+            self._refs["tavern_roster_ctr"],
+            ft.Divider(),
+            ft.Text("\u2014\u2014 \u961f\u4f0d\u7ba1\u7406 \u2014\u2014",
+                    size=13, weight=ft.FontWeight.BOLD),
+            self._refs["team_manage_ctr"],
+        ], scroll="auto", spacing=4)
+        return ft.Container(content=ctr, padding=6)
+
+    def _build_farm_tab(self):
+        self._ref("farm_count_lbl", ft.Text("\U0001f331 \u6211\u7684\u519c\u573a: 0/10", size=13))
+        self._ref("farm_plants_ctr", ft.Column([], spacing=4, scroll="auto"))
+        self._ref("farm_seeds_ctr", ft.Column([], spacing=4, scroll="auto"))
+        for pd in get_plant_catalog():
+            rc = PLANT_RARITY_COLORS.get(pd["rarity"], "#888888")
+            text = (f"{pd['icon']} {pd['name']}  "
+                    f"\u4ea7{int(pd['harvest_gold'])}G/{int(pd['harvest_interval_s'])}s  "
+                    f"{PLANT_RARITY_NAMES.get(pd['rarity'],'')} [{pd['seed_price']}G]")
+            self._refs["farm_seeds_ctr"].controls.append(
+                ft.ListTile(
+                    title=ft.Text(text, size=11, color=rc),
+                    trailing=ft.IconButton(icon=I.AGRICULTURE,
+                                           on_click=lambda e, p=pd: self._plant_seed(p)),
+                )
+            )
+        ctr = ft.Column([
+            self._refs["farm_count_lbl"],
+            ft.Container(content=self._refs["farm_plants_ctr"],
+                         border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
+                         border_radius=4, padding=4, height=180),
+            ft.Text("\u2014\u2014 \u79cd\u5b50\u5546\u5e97 \u2014\u2014",
+                    size=13, weight=ft.FontWeight.BOLD),
+            ft.Container(content=self._refs["farm_seeds_ctr"],
+                         border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
+                         border_radius=4, padding=4, expand=True),
+        ], scroll="auto", spacing=4)
+        return ft.Container(content=ctr, padding=6)
+
+    def _build_factory_tab(self):
+        self._ref("factory_status_lbl",
+                  ft.Text("\U0001f3ed \u672a\u5efa\u9020", size=13, color=ft.Colors.RED))
+        self._ref("factory_info_lbl",
+                  ft.Text("\u5efa\u9020\u8d39\u7528: " + ", ".join(f"{k}{v}" for k, v in FACTORY_BUILD_COST.items()) + "  |  \u57fa\u7840\u5229\u6da6: 50G/5min", size=11))
+        self._ref("factory_build_btn",
+                  ft.Button("\U0001f3d7 \u5efa\u9020\u5de5\u5382", on_click=self._build_factory_tab_action))
+        self._ref("factory_depts_ctr", ft.Column([], spacing=4))
+        self._ref("factory_workers_lbl",
+                  ft.Text("\u52b3\u5de5: 0/5  (\u6bcf\u4eba+15%, 80G/\u4eba)", size=12))
+
+        for dept in FACTORY_DEPTS:
+            if dept["id"] == "basic":
+                continue
+            cost_str = f"{dept['cost_gold']}G"
+            if dept["cost_resources"]:
+                cost_str += ", " + ", ".join(f"{k}{v}" for k, v in dept["cost_resources"].items())
+            self._ref(f"dept_card_{dept['id']}",
+                      ft.Container(
+                          content=ft.Column([
+                              ft.Row([
+                                  ft.Text(f"{dept['name']}", size=12, weight=ft.FontWeight.BOLD, expand=True),
+                                  self._ref(f"dept_status_{dept['id']}", ft.Text("\u672a\u89e3\u9501", size=11, color=ft.Colors.RED)),
+                              ], tight=True),
+                              ft.Text(f"{dept['desc']}  |  \u8d39\u7528: {cost_str}", size=10, color=Cs("GREY_600")),
+                              self._ref(f"dept_btn_{dept['id']}",
+                                        ft.Button(f"\u89e3\u9501 {dept['name']}", scale=0.8,
+                                                  on_click=lambda e, d=dept["id"]: self._buy_dept(d))),
+                          ], spacing=2),
+                          padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
+                          border_radius=4, bgcolor="#fafafa"))
+            self._refs["factory_depts_ctr"].controls.append(self._refs[f"dept_card_{dept['id']}"])
+
+        ctr = ft.Column([
+            self._refs["factory_status_lbl"],
+            self._refs["factory_info_lbl"],
+            self._refs["factory_build_btn"],
+            ft.Divider(),
+            ft.Text("\u2014\u2014 \u90e8\u95e8 \u2014\u2014", size=13, weight=ft.FontWeight.BOLD),
+            ft.Container(content=self._refs["factory_depts_ctr"],
+                         border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
+                         border_radius=4, padding=4),
+            ft.Divider(),
+            self._refs["factory_workers_lbl"],
+            ft.Row([
+                ft.Button("+ \u96c7\u4f63", scale=0.85, on_click=self._hire_factory_worker),
+                ft.Button("- \u89e3\u96c7", scale=0.85, on_click=self._fire_factory_worker),
+            ], spacing=8),
+        ], scroll="auto", spacing=4)
+        return ft.Container(content=ctr, padding=6)
+
+    # ─── Bottom Bar ──────────────────────────────────────────────
+    def _build_bottom_bar(self):
+        self.page.add(ft.Container(
+            content=ft.Row([
+                ft.Container(expand=True),
+                ft.Button("\U0001f4be \u5b58\u6863", on_click=self._save),
+                ft.Button("\U0001f4c2 \u8bfb\u6863", on_click=self._load),
+                ft.Button("\u2753 \u5e2e\u52a9", on_click=self._show_help),
+                ft.Container(expand=True),
+            ], spacing=8),
+            padding=4, border=ft.Border.only(top=ft.BorderSide(color=Cs("OUTLINE_VARIANT"))),
+        ))
+
+    # ─── Update Loop ────────────────────────────────────────────
+    async def _update_loop(self):
+        last_log_len = 0
+        battle_log_len = 0
+        while True:
+            await asyncio.sleep(0.3)
+            self._refresh_all_ui()
+            if len(self.game.logs) != last_log_len:
+                self._refresh_log()
+                last_log_len = len(self.game.logs)
+                battle_log_len = len(self.game.logs)
+            elif self.game.is_battling and len(self.game.logs) != battle_log_len:
+                self._refresh_log()
+                battle_log_len = len(self.game.logs)
+
+    def _refresh_log(self):
+        self.log_view.controls.clear()
+        for msg in self.game.logs[-60:]:
+            self.log_view.controls.append(ft.Text(msg, size=11))
+        try:
+            self.page.update()
+        except Exception:
+            pass
+
+    def _refresh_all_ui(self):
+        g = self.game
+        p = g.get_current_member()
+
+        self._refs["gold_label"].value = f"\U0001fa99 {g.player.gold}"
+        self._refs["kills_label"].value = f"\u51fb\u6740: {g.player.kill_count}"
+
+        for res, val in g.resources.items():
+            ref = self._refs.get(f"res_{res}")
+            if ref:
+                ref.value = str(val)
+
+        team = g.get_team()
+        for i, btn in enumerate(self.team_btns):
+            if i < len(team):
+                m = team[i]
+                btn.content = ft.Text(f"{m.role_name}\nLv.{m.level}", size=11)
+                bg = Cs("ORANGE_600") if i == g.current_member_idx else (Cs("GREEN_600") if i == 0 else Cs("DEEP_PURPLE_600"))
+                btn.style = ft.ButtonStyle(bgcolor=bg)
+            else:
+                btn.content = ft.Text("\u7a7a\u4f4d", size=11)
+                btn.style = ft.ButtonStyle(bgcolor=Cs("GREY_600"))
+
+        max_hp = p.get_max_hp_with_bonus()
+        self._refs["hero_name_lbl"].value = f"\U0001f9d9 {p.role_name} Lv.{p.level}"
+        self._refs["hp_lbl"].value = f"\u751f\u547d: {p.hp}/{max_hp}"
+        self._refs["atk_lbl"].value = f"\u653b\u51fb: {p.get_total_attack()}"
+        self._refs["def_lbl"].value = f"\u9632\u5fa1: {p.get_total_defense()}"
+        self._refs["crit_lbl"].value = f"CRIT: {p.get_crit_rate()}%"
+        self._refs["exp_lbl"].value = f"\u7ecf\u9a8c: {p.exp}/{p.level * 100}"
+        wn = p.weapon["name"] if p.weapon and isinstance(p.weapon, dict) else "None"
+        an = p.armor["name"] if p.armor and isinstance(p.armor, dict) else "None"
+        self._refs["wpn_lbl"].value = f"\u6b66\u5668: {wn}"
+        self._refs["arm_lbl"].value = f"\u62a4\u7532: {an}"
+
+        self._refs["map_lbl"].value = g.current_map
+        for mname in get_all_maps().keys():
+            btn = self._refs.get(f"map_btn_{mname}")
+            if btn:
+                if mname in g.unlocked_maps:
+                    btn.content = ft.Text(mname, size=11)
+                    btn.style = ft.ButtonStyle(bgcolor=Cs("GREEN_600"))
+                else:
+                    cost = get_all_maps()[mname].get("unlock_cost", 0)
+                    btn.content = ft.Text(f"{mname}({cost}G)", size=11)
+                    btn.style = ft.ButtonStyle(bgcolor=Cs("GREY_600"))
+
+        e = g.current_enemy
+        if e:
+            tag = " [BOSS]" if g.current_enemy_is_boss else ""
+            self._refs["enemy_display"].value = f"\U0001f480 {e['name']}{tag}  HP:{e['hp']} ATK:{e['attack']}"
+            self._refs["enemy_display"].color = ft.Colors.RED_800
+        else:
+            self._refs["enemy_display"].value = "\U0001f480 ???"
+            self._refs["enemy_display"].color = Cs("GREY_500")
+
+        self._refs["battle_btn"].disabled = g.is_battling
+        self._refs["battle_btn"].content = ft.Text(
+            "\u6218\u4e2d..." if g.is_battling else "\u2694 \u6218\u6597", size=13)
+        self._refs["auto_status_lbl"].value = "\u81ea\u52a8: \u5f00" if g.auto_battle else "\u81ea\u52a8: \u5173"
+        self._refs["auto_status_lbl"].color = ft.Colors.GREEN_600 if g.auto_battle else Cs("GREY_500")
+        self._refs["auto_btn"].content = ft.Text(
+            "\u23f9 \u505c\u6b62" if g.auto_battle else "\u26a1 \u81ea\u52a8\u6218\u6597", size=12)
+        self._refs["auto_btn"].style = ft.ButtonStyle(
+            bgcolor=Cs("RED_600") if g.auto_battle else Cs("ORANGE_600"))
+        self._refs["potions_lbl"].value = f"\U0001f9ea \u836f\u6c34: x{p.potions}"
+
+        for bname in get_all_building_names():
+            levels = g.building_levels.get(bname, [])
+            cnt_ref = self._refs.get(f"bld_count_{bname}")
+            info_ref = self._refs.get(f"bld_info_{bname}")
+            upg_btn = self._refs.get(f"bld_upg_btn_{bname}")
+            if cnt_ref:
+                cnt_ref.value = f"x{len(levels)}"
+            if info_ref:
+                if levels:
+                    avg = int(sum(levels) / len(levels))
+                    cfg = BUILDING_CONFIGS[bname]
+                    info_ref.value = f"Lv{avg} {cfg.get_output(avg)}/{cfg.get_interval(avg)}s"
+                else:
+                    info_ref.value = "\u672a\u5efa\u9020"
+            if upg_btn:
+                upg_btn.disabled = not levels
+
+        for wname, btn in self.wonder_btns.items():
+            if wname in g.wonders:
+                btn.content = ft.Text(f"\u2705 {wname}", size=12)
+                btn.disabled = True
+
+        # 更新农场状态
+        flbl = self._refs.get("farm_count_lbl")
+        if flbl:
+            flbl.value = f"\U0001f331 \u6211\u7684\u519c\u573a: {len(g.plants)}/10"
+        
+        # 更新植物列表
+        fctr = self._refs.get("farm_plants_ctr")
+        if fctr:
+            fctr.controls.clear()
+            for plant in g.plants:
+                pd = next((p for p in get_plant_catalog() if p["id"] == plant["id"]), None)
+                if pd:
+                    harvest_time = plant["harvest_time"]
+                    remaining = max(0, harvest_time - time.time())
+                    if remaining <= 0:
+                        status = "\U0001f7e2 \u53ef\u6536\u83b7"
+                        color = Cs("GREEN_600")
+                        btn = ft.Button("\u6536\u83b7", scale=0.8, 
+                                      on_click=lambda e, p=plant: self._harvest_plant(p))
+                    else:
+                        m, s = divmod(int(remaining), 60)
+                        status = f"\U0001f7e0 {m:02d}:{s:02d}"
+                        color = Cs("ORANGE_600")
+                        btn = ft.Row([
+                            ft.Text("\u79cd\u690d\u4e2d", size=11, color=Cs("GREY_500")),
+                            ft.Button("\u26a1", scale=0.7,
+                                      on_click=lambda e, p=plant: self._speedup(p)),
+                        ], spacing=4)
+                    
+                    fctr.controls.append(
+                        ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Text(f"{pd['icon']} {pd['name']}", size=12, weight=ft.FontWeight.BOLD, expand=True),
+                                    ft.Text(status, size=11, color=color)
+                                ], tight=True),
+                                ft.Container(content=btn, alignment=ft.alignment.Alignment(0.5, 0.5))
+                            ], spacing=2),
+                            padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4,
+                            bgcolor="#fafafa"
+                        )
+                    )
+        
+        # 更新工厂状态
+        fsl = self._refs.get("factory_status_lbl")
+        if fsl:
+            if self.game.factory:
+                bonus = calc_fb(self.game.factory_departments, self.game.factory_workers)
+                profit = int(FACTORY_BASE_PROFIT * bonus)
+                fsl.value = f"\U0001f3ed \u8fd0\u8425\u4e2d | \u501f\u7387: x{bonus:.1f} | {profit}G/{int(FACTORY_BASE_INTERVAL_S)}s"
+                fsl.color = ft.Colors.GREEN_700
+            else:
+                fsl.value = "\U0001f3ed \u672a\u5efa\u9020"
+                fsl.color = ft.Colors.RED
+        fbb = self._refs.get("factory_build_btn")
+        if fbb:
+            fbb.disabled = self.game.factory is not None
+        fwl = self._refs.get("factory_workers_lbl")
+        if fwl:
+            fwl.value = f"\u52b3\u5de5: {self.game.factory_workers}/5  (\u6bcf\u4eba+15%, 80G/\u4eba)"
+        for dept in FACTORY_DEPTS:
+            if dept["id"] == "basic":
+                continue
+            st = self._refs.get(f"dept_status_{dept['id']}")
+            bt = self._refs.get(f"dept_btn_{dept['id']}")
+            if st:
+                if dept["id"] in self.game.factory_departments:
+                    st.value = "\u2705 \u5df2\u89e3\u9501"
+                    st.color = ft.Colors.GREEN_700
+                else:
+                    st.value = "\u672a\u89e3\u9501"
+                    st.color = ft.Colors.RED
+            if bt:
+                bt.disabled = dept["id"] in self.game.factory_departments or self.game.factory is None
+
+        gl = self._refs.get("tavern_gold_lbl")
+        if gl:
+            gl.value = f"\U0001fa99 {g.player.gold}G"
+        tl = self._refs.get("tavern_timer_lbl")
+        if tl:
+            left = max(0, 3600 - (time.time() - g.tavern_last_refresh))
+            m, s = divmod(int(left), 60)
+            tl.value = f"\u5237\u65b0: {m:02d}:{s:02d}"
+        # 酒馆角色列表
+        rctr = self._refs.get("tavern_roster_ctr")
+        if rctr:
+            rctr.controls.clear()
+            roster = g.get_tavern_roster()
+            for ch in roster:
+                cost = ch.get("cost", g.player.level * 100)
+                wn = ch.get("weapon", {}).get("name", "无") if ch.get("weapon") else "无"
+                rctr.controls.append(ft.Container(
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Text(f"{ch.get('role_name','?')} Lv.{ch.get('level',1)}", size=12, weight=ft.FontWeight.BOLD, expand=True),
+                            ft.Text(f"{cost}G", size=12, color=ft.Colors.AMBER_700),
+                        ], tight=True),
+                        ft.Text(f"\u6b66\u5668: {wn}", size=10, color=Cs("GREY_600")),
+                        ft.Button("\u62db\u52df", scale=0.8, on_click=lambda e, c=ch: self._recruit_member(c)),
+                    ], spacing=2), padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4))
+            if not roster:
+                rctr.controls.append(ft.Text("\u6682\u65e0\u53ef\u62db\u52df\u89d2\u8272", size=12, color=Cs("GREY_500")))
+        # 队伍管理列表
+        tctr = self._refs.get("team_manage_ctr")
+        if tctr:
+            tctr.controls.clear()
+            team = g.get_team()
+            for i, m in enumerate(team):
+                tag = " \u2605\u961f\u957f" if i == 0 else f" #{i}"
+                wn = m.weapon["name"] if m.weapon and isinstance(m.weapon, dict) else "无"
+                tctr.controls.append(ft.Container(
+                    content=ft.Row([
+                        ft.Text(f"{m.role_name} Lv.{m.level}{tag}", size=12, weight=ft.FontWeight.BOLD, expand=True),
+                        ft.Text(f"HP:{m.hp}/{m.get_max_hp_with_bonus()}", size=11),
+                        ft.Button("\u5207\u6362", scale=0.75,
+                                  on_click=lambda e, idx=i: self._switch_to(idx)) if i != g.current_member_idx else None,
+                        ft.Button("\u8e22\u51fa", scale=0.75,
+                                  on_click=lambda e, idx=i: self._kick_member_ui(idx)) if i > 0 else None,
+                    ], spacing=4, alignment=ft.alignment.Alignment(-1, 0)),
+                    padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4,
+                    bgcolor="#fff8e1" if i == g.current_member_idx else None))
+
+    # ─── Actions ────────────────────────────────────────────────
+    def _do_battle(self, e=None):
+        if self.game.is_battling:
+            self.game.add_log("\u6218\u4e2d\u4e2d...")
+            return
+        enemy, is_boss = get_random_enemy(self.game.current_map)
+        if not enemy:
+            self.game.add_log("\u6ca1\u6709\u654c\u4eba!")
+            return
+        self.game.current_enemy = enemy
+        self.game.current_enemy_is_boss = is_boss
+        threading.Thread(target=self._battle_thread, args=(enemy, is_boss), daemon=True).start()
+
+    def _battle_thread(self, enemy, is_boss):
+        self.game.is_battling = True
+        self._refresh_all_ui()
+        try:
+            result, msg = self.game.battle_team(enemy, is_boss=is_boss)
+            self.game.add_log(msg)
+        except Exception as ex:
+            self.game.add_log(f"Battle error: {ex}")
+        finally:
+            self.game.is_battling = False
+            e2 = self.game.current_enemy
+            b2 = self.game.current_enemy_is_boss
+            if e2:
+                tag = " [BOSS]" if b2 else ""
+                self.game.add_log("Next: " + e2["name"] + tag)
+            self._refresh_all_ui()
+
+    def _toggle_auto(self, e=None):
+        self.game.auto_battle = not self.game.auto_battle
+        if self.game.auto_battle:
+            self.game.add_log("\u26a1 \u81ea\u52a8\u6218\u6597 ON!")
+            self.game.start_auto_battle()
+        else:
+            self.game.add_log("\u23f9 \u81ea\u52a8\u6218\u6597 OFF.")
+
+    def _refresh_enemy(self, e=None):
+        if self.game.is_battling:
+            self.game.add_log("\u6218\u4e2d\u65e0\u6cd5\u5237\u65b0!")
+            return
+        cost = 5 + random.randint(0, 5)
+        if self.game.player.gold < cost:
+            self.game.add_log("\u91d1\u5e01\u4e0d\u8db3! \u9700\u8981 " + str(cost) + "G")
+            return
+        self.game.player.gold -= cost
         enemy, is_boss = get_random_enemy(self.game.current_map)
         if enemy:
             self.game.current_enemy = enemy
             self.game.current_enemy_is_boss = is_boss
-            boss_tag = " [BOSS]" if is_boss else ""
-            self.enemy_var.set(f"{enemy['name']}{boss_tag}  HP:{enemy['hp']}  ATK:{enemy['attack']}")
-            self.game.add_log(f"🔄 刷新敌人: {enemy['name']}{boss_tag}")
+            tag = " [BOSS]" if is_boss else ""
+            self.game.add_log("Refreshed: " + enemy["name"] + tag + " (-" + str(cost) + "G)")
 
-    def do_battle(self):
-        if self.game.is_battling:
-            return
-        # 随机获取敌人，有5%概率遇到BOSS
-        from modules.maps import get_random_enemy
-        enemy, is_boss = get_random_enemy(self.game.current_map)
-        if not enemy:
-            self.game.add_log("没有敌人!")
-            return
-        # 保存当前敌人信息
-        self.game.current_enemy = enemy
-        self.game.current_enemy_is_boss = is_boss
-        t = threading.Thread(target=self._battle_wrapper, args=(enemy, is_boss), daemon=True)
-        t.start()
-
-    def _battle_wrapper(self, enemy, is_boss=False):
-        self.root.after(0, lambda: self.battle_btn.config(state="disabled"))
-        try:
-            result, msg = self.game.battle_team(enemy, is_boss=is_boss)
-        except Exception as e:
-            self.game.add_log(f"Battle error: {e}")
-        finally:
-            self.game.is_battling = False
-            self.root.after(0, lambda: self.battle_btn.config(state="normal"))
-
-    def toggle_auto(self):
-        self.game.auto_battle = not self.game.auto_battle
-        if self.game.auto_battle:
-            self.auto_label.config(text="自动: 开", fg="#4CAF50")
-            self.game.add_log("Auto battle ON!")
-            self.game.start_auto_battle()
+    def _change_map(self, map_name):
+        if map_name in self.game.unlocked_maps:
+            ok, msg = self.game.change_map(map_name)
+            self.game.add_log(msg)
         else:
-            self.auto_label.config(text="自动: 关", fg="#999")
-            self.game.add_log("Auto battle OFF.")
+            ok, msg = self.game.unlock_map(map_name)
+            self.game.add_log(msg)
+            if ok:
+                enemy, is_boss = get_random_enemy(map_name)
+                self.game.current_enemy = enemy
+                self.game.current_enemy_is_boss = is_boss
 
-    def do_buy_potion(self):
+    def _switch_member(self, idx):
+        ok, msg = self.game.switch_member(idx)
+        if not ok:
+            self._show_toast(msg)
+        else:
+            self.game.add_log(f"\u5207\u6362\u5230: {self.game.get_current_member().role_name}")
+
+    def _buy_potion(self, e=None):
         ok, msg = self.game.buy_potion()
         self.game.add_log(msg)
-        self.refresh_ui()
 
-    def do_use_potion(self):
+    def _use_potion(self, e=None):
         ok, msg = self.game.use_potion()
         self.game.add_log(msg)
-        self.refresh_ui()
+        self._refresh_all_ui()
 
-    def _on_auto_potion_change(self, event=None):
-        val_str = self.auto_potion_var.get()
-        mapping = {"OFF": 0, "30%": 30, "50%": 50, "80%": 80}
-        val = mapping.get(val_str, 0)
-        self.game.set_auto_potion_threshold(val)
-        if val > 0:
-            self.auto_potion_label.config(text=f"Active ({val}%)", fg="#4CAF50")
-            self.game.add_log(f"Auto-potion ON: HP < {val}%")
+
+    def _on_auto_potion_change(self, e=None):
+        val_str = self._refs["auto_potion_dd"].value
+        if val_str == "OFF":
+            val = 0
         else:
-            self.auto_potion_label.config(text="Disabled", fg="#999")
-            self.game.add_log("Auto-potion OFF")
+            val = int(val_str.replace("%", ""))
+        self.game.set_auto_potion_threshold(val)
+        self._update_auto_potion_label()
+
+    def _update_auto_potion_label(self):
+        t = self.game.auto_potion_threshold
+        lbl = self._refs["auto_potion_lbl"]
+        dd = self._refs["auto_potion_dd"]
+        if t > 0:
+            lbl.value = "Active (" + str(t) + "%)"
+            lbl.color = Cs("GREEN_700")
+        else:
+            lbl.value = "已关闭"
+            lbl.color = Cs("GREY_500")
+            dd.value = "OFF"
 
     def _restore_auto_potion_ui(self):
-        """读档后恢复自动药水下拉框状态"""
         t = self.game.auto_potion_threshold
         rev = {0: "OFF", 30: "30%", 50: "50%", 80: "80%"}
-        self.auto_potion_var.set(rev.get(t, "OFF"))
-        if t > 0:
-            self.auto_potion_label.config(text=f"Active ({t}%)", fg="#4CAF50")
-        else:
-            self.auto_potion_label.config(text="Disabled", fg="#999")
-
-    def hire_worker(self, name, idx):
-        ok, msg = self.game.hire_worker(name, idx)
+        dd = self._refs["auto_potion_dd"]
+        dd.value = rev.get(t, "OFF")
+        self._update_auto_potion_label()
+    def _build_building(self, name):
+        ok, msg = self.game.build_building(name)
         self.game.add_log(msg)
-        self.refresh_ui()
 
-    def fire_worker(self, name, idx):
-        ok, msg = self.game.fire_worker(name, idx)
+    def _upgrade_building(self, name):
+        levels = self.game.building_levels.get(name, [])
+        if not levels:
+            self.game.add_log("\u5148\u5efa\u9020!")
+            return
+        ok, msg = self.game.upgrade_building(name, len(levels) - 1)
+        self.game.add_log(f"{name} \u5347\u7ea7\u6210\u529f!" if ok else f"\u5347\u7ea7: {msg}")
+
+    def _build_wonder(self, name):
+        ok, msg = self.game.build_wonder(name)
         self.game.add_log(msg)
-        self.refresh_ui()
 
-    def build_wonder(self, wonder_name):
-        ok, msg = self.game.build_wonder(wonder_name)
+    def _buy_weapon(self, wpn):
+        ok, msg = self.game.buy_weapon(wpn)
+        self.game.add_log(f"\u8d2d\u4e70\u6b66\u5668: {msg}" if ok else f"\u8d2d\u4e70\u5931\u8d25: {msg}")
+
+    def _buy_armor(self, arm):
+        ok, msg = self.game.buy_armor(arm)
+        self.game.add_log(f"\u8d2d\u4e70\u62a4\u7532: {msg}" if ok else f"\u8d2d\u4e70\u5931\u8d25: {msg}")
+
+    def _buy_novelty(self, item):
+        ok, msg = self.game.buy_novelty_item(item)
         self.game.add_log(msg)
-        if ok and wonder_name in self.wonder_buttons:
-            self.wonder_buttons[wonder_name].config(text=f"\u2705 {wonder_name}", state="disabled")
-        self.refresh_ui()
 
-    def use_novelty_item(self, idx):
-        ok, msg = self.game.use_novelty_item(idx)
+    def _recruit_member(self, ch):
+        ok, msg = self.game.recruit_member(ch.get("role_name"), ch.get("level", 1), ch.get("cost", 100), ch.get("gear"))
         self.game.add_log(msg)
-        self.refresh_ui()
 
-    def sell_item(self, idx):
-        ok, msg = self.game.sell_inventory_item(idx)
+    def _switch_to(self, idx):
+        ok, msg = self.game.switch_member(idx)
+
+    def _kick_member_ui(self, idx):
+        ok, msg = self.game.kick_member(idx)
         self.game.add_log(msg)
-        self.refresh_ui()
 
-    def buy_material(self, material):
-        try:
-            amount = int(self.res_buy_entries[material].get())
-        except ValueError:
-            amount = 10
-            self.res_buy_entries[material].delete(0, tk.END)
-            self.res_buy_entries[material].insert(0, "10")
-        ok, msg = self.game.buy_material(material, amount)
+    def _tavern_refresh(self, e=None):
+        ok, msg = self.game.manual_refresh_tavern()
         self.game.add_log(msg)
-        self.refresh_ui()
 
-    def sell_material(self, material):
-        try:
-            amount = int(self.res_buy_entries[material].get())
-        except ValueError:
-            amount = 10
-            self.res_buy_entries[material].delete(0, tk.END)
-            self.res_buy_entries[material].insert(0, "10")
-        ok, msg = self.game.sell_material(material, amount)
+    def _open_tavern_tab(self, e=None):
+        self.right_tabs.selected_index = 3
+
+    def _plant_seed(self, pd):
+        ok, msg = self.game.plant_seed(pd["id"], cost_gold=pd["seed_price"])
         self.game.add_log(msg)
-        self.refresh_ui()
+        
+    def _harvest_plant(self, plant):
+        ok, msg = self.game.harvest_plant(plant["id"])
+        self.game.add_log(msg)
 
-    # ──────────────── Refresh ────────────────
+    def _speedup(self, plant):
+        ok, msg = self.game.speedup_plant(plant["id"])
+        self.game.add_log(msg)
 
-    def refresh_buildings(self):
-        for bname in get_all_building_names():
-            config = BUILDING_CONFIGS[bname]
-            count = self.game.buildings.get(bname, 0)
-            levels = self.game.building_levels.get(bname, [])
-            self.building_widgets[bname]["count"].config(text=f"x{count}")
+    def _build_factory_tab_action(self, e=None):
+        ok, msg = self.game.build_factory()
+        self.game.add_log(msg)
 
-            if levels:
-                avg_lvl = sum(levels) / len(levels)
-                avg_output = config.get_output(int(avg_lvl))
-                avg_interval = config.get_interval(int(avg_lvl))
-                total_workers = sum(
-                    self.game.building_workers.get(bname, [0])[i]
-                    for i in range(min(len(levels), len(self.game.building_workers.get(bname, []))))
-                )
-                total_max = sum(config.get_max_workers(l) for l in levels)
-                self.building_widgets[bname]["info"].config(
-                    text=f"Avg: {avg_output}/{avg_interval}s | \u26CF{total_workers}/{total_max}")
-            else:
-                self.building_widgets[bname]["info"].config(text="not built")
+    def _buy_dept(self, dept_id):
+        ok, msg = self.game.buy_factory_dept(dept_id)
+        self.game.add_log(msg)
 
-            # 快照对比：只有结构变化时才重建按钮
-            workers_snap = tuple(
-                self.game.building_workers.get(bname, [0])[i]
-                for i in range(len(levels))
-            )
-            new_snap = (count, tuple(levels), workers_snap)
-            if new_snap == self._last_building_snap.get(bname):
-                continue
-            self._last_building_snap[bname] = new_snap
+    def _hire_factory_worker(self, e=None):
+        ok, msg = self.game.hire_factory_worker()
+        self.game.add_log(msg)
 
-            uf = self.building_widgets[bname]["upgrade_frame"]
-            for w in uf.winfo_children():
-                w.destroy()
+    def _fire_factory_worker(self, e=None):
+        ok, msg = self.game.fire_factory_worker()
+        self.game.add_log(msg)
 
-            if not levels:
-                continue
+    def _hire_worker(self, building_name):
+        ok, msg = self.game.hire_worker(building_name)
+        self.game.add_log(msg)
 
-            for idx, lvl in enumerate(levels):
-                row = tk.Frame(uf)
-                row.pack(fill="x", pady=1)
-                interval = config.get_interval(lvl)
-                workers = (self.game.building_workers.get(bname, [0])[idx]
-                           if idx < len(self.game.building_workers.get(bname, [])) else 0)
-                output = config.get_output(lvl, workers)
-                max_w = config.get_max_workers(lvl)
-                next_cost = config.get_upgrade_cost(lvl + 1)
-                cost_s = f"G{next_cost.get('Gold',0)} W{next_cost.get('Wood',0)}"
+    def _fire_worker(self, building_name):
+        ok, msg = self.game.fire_worker(building_name)
+        self.game.add_log(msg)
 
-                tk.Label(row, text=f"Lv{lvl} {output}/{interval}s \u26CF{workers}/{max_w}",
-                         font=("Arial", 8), anchor="w").pack(side="left")
-                tk.Button(row, text="Up", font=("Arial", 7), bg="#E64A19", fg="white",
-                         relief="groove",
-                         command=lambda n=bname, i=idx: self.upgrade_building(n, i)).pack(side="right", padx=1)
-                tk.Button(row, text="+", font=("Arial", 7), bg="#1976D2", fg="white",
-                         relief="groove", width=2,
-                         command=lambda n=bname, i=idx: self.hire_worker(n, i)).pack(side="right", padx=1)
-                tk.Button(row, text="-", font=("Arial", 7), bg="#757575", fg="white",
-                         relief="groove", width=2,
-                         command=lambda n=bname, i=idx: self.fire_worker(n, i)).pack(side="right", padx=1)
-
-    def refresh_ui(self):
-        try:
-            # 资源
-            for res, val in self.game.resources.items():
-                if res in self.res_labels:
-                    self.res_labels[res].config(text=str(val))
-            self.gold_label.config(text=f"🪙 {self.game.player.gold}")
-            self.kills_label.config(text=f"击杀: {self.game.player.kill_count}")
-
-            # 队伍面板
-            team = self.game.get_team()
-            for i in range(3):
-                if i < len(team):
-                    m = team[i]
-                    max_hp = m.get_max_hp_with_bonus()
-                    self.team_name_labels[i].set(m.role_name)
-                    self.team_hp_labels[i].set("{0}/{1}".format(m.hp, max_hp))
-                    self.team_level_labels[i].set("Lv.{0}".format(m.level))
-                    # 当前选中高亮
-                    if i == self.game.current_member_idx:
-                        bg = "#FF5722"
-                    elif i == 0:
-                        bg = "#4CAF50"
-                    elif i == 1:
-                        bg = "#1565C0"
-                    else:
-                        bg = "#6A1B9A"
-                    self.team_btn_vars[i].config(bg=bg)
-                else:
-                    self.team_name_labels[i].set("空位")
-                    self.team_hp_labels[i].set("--/--")
-                    self.team_level_labels[i].set("")
-                    self.team_btn_vars[i].config(bg="#9E9E9E")
-
-            # Hero（当前选中成员）
-            p = self.game.get_current_member()
-            max_hp = p.get_max_hp_with_bonus()
-            self.hero_lbl_frame.config(text="\U0001F9D1 {0} Lv.{1}".format(p.role_name, p.level))
-            self.hp_var.set("生命: {0}/{1}".format(p.hp, max_hp))
-            self.attack_var.set("攻击: {0}".format(p.get_total_attack()))
-            self.defense_var.set("防御: {0}".format(p.get_total_defense()))
-            self.crit_var.set("CRIT: {0}%".format(p.get_crit_rate()))
-            self.level_var.set("Lv.{0}".format(p.level))
-            self.exp_var.set("经验: {0}/{1}".format(p.exp, p.level * 100))
-            w_name = p.weapon["name"] if p.weapon and isinstance(p.weapon, dict) else "None"
-            a_name = p.armor["name"] if p.armor and isinstance(p.armor, dict) else "None"
-            self.weapon_var.set("武器: {0}".format(w_name))
-            self.armor_var.set("护甲: {0}".format(a_name))
-            # 药水数量
-            if p.is_player:
-                self.potions_var.set("x{0}".format(p.potions))
-            else:
-                self.potions_var.set("队友")
-
-            # 地图
-            self.map_var.set(self.game.current_map)
-            for mn, btn in self.map_buttons.items():
-                if mn in self.game.unlocked_maps:
-                    btn.config(bg="#4CAF50", fg="white")
-                else:
-                    cost = get_all_maps()[mn].get("unlock_cost", 0)
-                    btn.config(bg="#BDBDBD", fg="#333", text=f"{mn}({cost}G)")
-
-            # 敌人
-            enemy = self.game.current_enemy
-            is_boss = self.game.current_enemy_is_boss
-            if enemy:
-                boss_tag = " [BOSS]" if is_boss else ""
-                self.enemy_var.set(f"{enemy['name']}{boss_tag}  HP:{enemy['hp']}  ATK:{enemy['attack']}")
-            else:
-                self.enemy_var.set("No enemy")
-
-            # Inventory
-            inv = p.get_inventory()
-            self.inv_count_label.config(text=f"{inv.count()}/20")
-            for i in range(20):
-                slot = self.inv_slots[i]
-                item = inv.get(i)
-                if item:
-                    item_type = item.get("type", "equipment")
-                    if item_type == "novelty":
-                        # 杂货物品
-                        rc = NOVELTY_RARITY_COLORS.get(item.get("rarity_idx", 0), "#888")
-                        txt = item["name"]
-                        slot["lbl"].config(text=txt, fg=rc)
-                        slot["type_lbl"].config(text="🎁", fg=rc)
-                        # S按钮：所有杂货均可出售
-                        slot["btn_s"].config(state="normal", bg="#FF9800", activebackground="#FF9800")
-                        if item.get("kind") == "plant_seed":
-                            # 植物种子：E按钮改为种植
-                            slot["btn_e"].config(state="normal", bg="#4CAF50", fg="white",
-                                              activebackground="#388E3C",
-                                              command=lambda idx=i: self.use_novelty_item(idx))
-                        else:
-                            # 其他杂货：E禁用
-                            slot["btn_e"].config(state="disabled", bg="#BDBDBD", activebackground="#BDBDBD",
-                                              text="E")
-                    else:
-                        # 装备
-                        rc = item.get("rarity_color", "#333")
-                        lvl_req = item.get("level_req", 0)
-                        sell_price = item.get("sell_price", 10)
-                        icon = "✅" if p.level >= lvl_req else "🔒"
-                        if item["type"] == "weapon":
-                            txt = f"{icon} {item['name']} ATK:{item['attack']}"
-                            slot["type_lbl"].config(text="⚔", fg="#7B1FA2")
-                        else:
-                            txt = f"{icon} {item['name']} DEF:{item['defense']}"
-                            slot["type_lbl"].config(text="🛡", fg="#512DA8")
-                        txt += f" 💰{sell_price}"
-                        slot["lbl"].config(text=txt, fg=rc)
-                        slot["btn_e"].config(state="normal" if p.level >= lvl_req else "disabled",
-                                          bg="#4CAF50" if p.level >= lvl_req else "#BDBDBD",
-                                          activebackground="#4CAF50" if p.level >= lvl_req else "#BDBDBD",
-                                          text="E",
-                                          command=lambda idx=i: self.equip_item(idx))
-                        slot["btn_s"].config(state="normal", bg="#FF9800", activebackground="#FF9800")
-                else:
-                    slot["lbl"].config(text="Empty", fg="#ccc")
-                    slot["type_lbl"].config(text="")
-                    slot["btn_e"].config(state="disabled", bg="#BDBDBD", activebackground="#BDBDBD")
-                    slot["btn_s"].config(state="disabled", bg="#BDBDBD", activebackground="#BDBDBD")
-
-            # Log - 保存当前位置，刷新后恢复
-            if not hasattr(self, 'log_listbox') or self.log_listbox is None:
-                return
-            was_at_bottom = False
-            try:
-                pos = self.log_listbox.yview()
-                # 判断是否在底部附近
-                was_at_bottom = (pos[1] - pos[0]) < 1.1 or pos[0] > 0.9
-                saved_pos = pos[0]
-            except:
-                was_at_bottom = True
-                saved_pos = 0
-            
-            self.log_listbox.delete(0, tk.END)
-            for log in self.game.logs[-50:]:
-                self.log_listbox.insert(tk.END, log)
-            
-            if was_at_bottom:
-                self.log_listbox.see(tk.END)
-            else:
-                self.log_listbox.yview_moveto(saved_pos)
-            self.refresh_buildings()
-            self.refresh_farm_ui()
-            self._refresh_factory_ui()
-        except Exception as e:
-            import traceback
-            print("ERROR in refresh_ui:")
-            traceback.print_exc()
-        finally:
-            self.root.after(300, self.refresh_ui)  # 确保循环继续
-
-    def update_loop(self):
-        pass
-
-    def save_game(self):
+    # ─── Save / Load ────────────────────────────────────────────
+    def _save(self, e=None):
         data = {
             "resources": self.game.resources,
             "buildings": self.game.buildings,
@@ -1170,254 +1151,67 @@ class App:
             "tavern": self.game.tavern_to_dict(),
             "current_member_idx": self.game.current_member_idx,
         }
-        with open("D:\\pyproject\\hero_workshop\\save.json", "w", encoding="utf-8") as f:
+        with open(SAVE_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        self.game.add_log("Game saved!")
+        self.game.add_log(f"\U0001f4be \u5df2\u5b58\u6863!")
+        self._show_toast("\u5b58\u6863\u6210\u529f!")
 
-    def load_game(self):
-        save_path = "D:\\pyproject\\hero_workshop\\save.json"
-        if not os.path.exists(save_path):
-            self.game.add_log("No save file!")
+    def _load(self, e=None):
+        if not os.path.exists(SAVE_PATH):
+            self.game.add_log("\u6ca1\u6709\u5b58\u6863\u6587\u4ef6!")
             return
-        with open(save_path, "r", encoding="utf-8") as f:
+        with open(SAVE_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
-        self.game.resources = data.get("resources", {"木材": 0, "铁矿": 0, "皮革": 0, "石头": 0})
+        self.game.resources = data.get("resources", {})
         self.game.buildings = data.get("buildings", {})
         self.game.building_levels = data.get("building_levels", {})
         self.game.building_workers = data.get("building_workers", {})
         self.game.player.from_dict(data.get("player", {}))
-        self.game.current_map = data.get("current_map", "\u50B2\u6765\u56FD")
-        self.game.unlocked_maps = set(data.get("unlocked_maps", ["\u50B2\u6765\u56FD"]))
+        self.game.current_map = data.get("current_map", "\u50b2\u6765\u56fd")
+        self.game.unlocked_maps = set(data.get("unlocked_maps", ["\u50b2\u6765\u56fd"]))
         self.game.current_enemy_idx = data.get("current_enemy_idx", 0)
-        self.game.wonders = {name: True for name in data.get("wonders", [])}
+        self.game.wonders = {n: True for n in data.get("wonders", [])}
         self.game.plants = data.get("plants", [])
         self.game.factory = data.get("factory")
-        self.game.factory_departments = data.get("factory_departments", ["basic"] if data.get("factory") else [])
+        self.game.factory_departments = data.get("factory_departments",
+                                                  ["basic"] if data.get("factory") else [])
         self.game.factory_workers = data.get("factory_workers", 0)
         self.game.factory_last_profit_time = data.get("factory_last_profit_time", 0)
         self.game.auto_potion_threshold = data.get("auto_potion_threshold", 0)
         self.game.team_from_dict(data.get("team", []))
         self.game.tavern_from_dict(data.get("tavern", []))
         self.game.current_member_idx = data.get("current_member_idx", 0)
-        for wn in self.game.wonders:
-            if wn in self.wonder_buttons:
-                self.wonder_buttons[wn].config(text=f"\u2705 {wn}", state="disabled")
         for name, levels in self.game.building_levels.items():
             for idx in range(len(levels)):
                 self.game.start_building_production(name, idx)
-        self.game.add_log("Game loaded!")
-        self._restore_auto_potion_ui()
+        self.game.add_log("\U0001f4c2 \u8bfb\u6863\u6210\u529f!")
+        self._show_toast("\u8bfb\u6863\u6210\u529f!")
 
-    def show_help(self):
-        msg = """勇者工坊 v3.0
+    def _show_help(self, e=None):
+        self.page.dialog = ft.AlertDialog(
+            title=ft.Text("\u5e2e\u52a9"),
+            content=ft.Text(
+                "\u52c7\u8005\u5de5\u574a v5.1\n\n"
+                "\u2694 \u6218\u6597: \u961f\u4f0d\u5168\u5458\u968f\u673a\u653b\u51fb\n"
+                "\u26a1 \u81ea\u52a8: \u6301\u7eed\u6218\u6597\n"
+                "\U0001f3d7 \u5efa\u9020: \u6d88\u8017\u8d44\u6e90\n"
+                "\U0001f5fa \u5730\u56fe: \u5207\u6362\u5730\u56fe\n"
+            ),
+            actions=[ft.TextButton("OK", on_click=lambda e: setattr(self.page, "dialog", None) or self.page.update())],
+        )
+        self.page.dialog.open = True
+        self.page.update()
 
-地图:
-- AoLai(Lv1): Butterfly,Parrot,Lobster,Crab | BOSS:9HeadDemon
-- DaTang(Lv11/500G): SilverArm,Techin,GoldArm,Captain | BOSS:SnakeSpirit
-- YangGuan(Lv15/1000G): TurkArcher,PersianBlade | BOSS:TurkBowKing,PersianAssassin
-- DongHai(Lv20/2000G): SeaGuard,TurtleGen,SnailDemon | BOSS:ShrimpFiend,Brahma,SeaSage,BloodSnail
-
-建筑: 
-药水: 25G each, heal 20HP.
-
-Click map button to switch/unlock maps!
-Click Battle or 自动战斗 to fight!"""
-        messagebox.showinfo("帮助", msg)
-
-    def run(self):
-        self.root.mainloop()
-
-
-
-
-
-    
+    def _show_toast(self, msg: str):
+        sn = ft.SnackBar(ft.Text(msg), duration=2000)
+        self.page.overlay.append(sn)
+        sn.open = True
+        self.page.update()
 
 
-    
+def main(page: ft.Page):
+    HeroWorkshopApp(page)
 
-
-    def _switch_member(self, idx):
-        """切换当前选中的队伍成员"""
-        ok, msg = self.game.switch_member(idx)
-        if not ok:
-            messagebox.showinfo("提示", msg)
-        else:
-            self.refresh_ui()
-
-    # ═══════════════════ V5.0 酒馆 UI ═══════════════════
-
-    def _open_tavern_tab(self):
-        """快捷打开酒馆 tab"""
-        # 找到 right notebook，切换到酒馆 tab（最后一个 tab 之前是酒馆）
-        # 酒馆在 farm 之前，所以是倒数第2个
-        nb = self.right_notebook
-        for i in range(nb.index('end')):
-            txt = nb.tab(i, 'text')
-            if 'Tvern' in txt or '\U0001F37A' in txt or '酒馆' in txt:
-                nb.select(i)
-                return
-        # fallback: 选第6个tab
-        if nb.index('end') >= 6:
-            nb.select(6)
-
-    def _build_tavern_tab(self, parent):
-        """构建酒馆 tab UI"""
-        # 顶部信息栏
-        info = tk.Frame(parent, bg="#3E2723", pady=4)
-        info.pack(fill="x")
-        self.tavern_gold_var = tk.StringVar(value="🪙 100G")
-        self.tavern_timer_var = tk.StringVar(value="刷新: --:--")
-        tk.Label(info, textvariable=self.tavern_gold_var, font=("Arial", 11, "bold"),
-                 fg="#FFD700", bg="#3E2723").pack(side="left", padx=10)
-        tk.Label(info, textvariable=self.tavern_timer_var, font=("Arial", 9),
-                 fg="#FFCC80", bg="#3E2723").pack(side="right", padx=10)
-        tk.Button(info, text="🔄 手动刷新 (50G)", command=self._do_tavern_refresh,
-                  font=("Arial", 9), bg="#795548", fg="white",
-                  relief="groove").pack(side="right", padx=8)
-
-        # 队友列表区域
-        tk.Label(parent, text="── 可招募角色 ──", font=("Arial", 10, "bold"),
-                 fg="#5D4037").pack(pady=(8, 4))
-
-        self.tavern_frames = []
-        self.tavern_recruit_btns = []
-        self.tavern_role_labels = []
-        self.tavern_cost_labels = []
-        self.tavern_gear_labels = []
-
-        for i in range(3):
-            fr = tk.Frame(parent, relief="groove", bd=1, padx=8, pady=6)
-            fr.pack(fill="x", padx=8, pady=3)
-
-            role_var = tk.StringVar(value="--- (空位)")
-            cost_var = tk.StringVar(value="")
-            gear_var = tk.StringVar(value="")
-            lvl_var = tk.StringVar(value="")
-
-            rl = tk.Label(fr, textvariable=role_var, font=("Arial", 10, "bold"), fg="#4E342E", anchor="w")
-            rl.pack(anchor="w")
-            ll = tk.Label(fr, textvariable=lvl_var, font=("Arial", 9), fg="#6D4C41", anchor="w")
-            ll.pack(anchor="w")
-            gl = tk.Label(fr, textvariable=gear_var, font=("Arial", 8), fg="#8D6E63", anchor="w")
-            gl.pack(anchor="w")
-
-            bottom = tk.Frame(fr)
-            bottom.pack(fill="x", pady=(4, 0))
-            cl = tk.Label(bottom, textvariable=cost_var, font=("Arial", 10, "bold"), fg="#E65100", width=10)
-            cl.pack(side="left")
-            rb = tk.Button(bottom, text="招募", command=lambda idx=i: self._recruit_from_tavern(idx),
-                           font=("Arial", 9, "bold"), bg="#4CAF50", fg="white",
-                           relief="groove", padx=10)
-            rb.pack(side="right")
-
-            self.tavern_frames.append(fr)
-            self.tavern_role_labels.append(role_var)
-            self.tavern_cost_labels.append(cost_var)
-            self.tavern_gear_labels.append(gear_var)
-            self.tavern_recruit_btns.append(rb)
-
-        # 当前队友管理
-        sep = tk.Frame(parent, bg="#BCAAA4", height=2)
-        sep.pack(fill="x", padx=8, pady=(12, 4))
-        tk.Label(parent, text="── 队伍管理 ──", font=("Arial", 10, "bold"), fg="#5D4037").pack(pady=4)
-
-        self.team_manage_frame = tk.Frame(parent)
-        self.team_manage_frame.pack(fill="x", padx=8, pady=4)
-        self._refresh_team_manage()
-
-        # 刷新酒馆数据
-        self._refresh_tavern_ui()
-
-    def _refresh_tavern_ui(self):
-        """刷新酒馆UI"""
-        if not hasattr(self, 'tavern_role_labels'):
-            return
-        roster = self.game.get_tavern_roster()
-        for i in range(3):
-            if i < len(roster):
-                r = roster[i]
-                self.tavern_role_labels[i].set("{0} ({1})".format(
-                    r['role_name'],
-                    '高级' if r.get('premium') else '普通'))
-                self.tavern_cost_labels[i].set("{0}G".format(r['cost']))
-                gear = r.get('gear', [])
-                if gear:
-                    gear_names = ', '.join(['{0}({1})'.format(eq['name'], eq.get('rarity', '普通')) for eq in gear])
-                    self.tavern_gear_labels[i].set("装备: " + gear_names)
-                else:
-                    self.tavern_gear_labels[i].set("装备: 无")
-                self.tavern_recruit_btns[i].config(state="normal")
-                self.tavern_frames[i].config(bg="#EFEBE9")
-            else:
-                self.tavern_role_labels[i].set("--- (空位)")
-                self.tavern_cost_labels[i].set("")
-                self.tavern_gear_labels[i].set("")
-                self.tavern_recruit_btns[i].config(state="disabled")
-                self.tavern_frames[i].config(bg="#F5F5F5")
-
-        # 刷新金币显示
-        self.tavern_gold_var.set("🪙 {0}G".format(self.game.player.gold))
-
-        # 刷新倒计时
-        left = self.game.get_tavern_time_left()
-        m, s = divmod(left, 60)
-        self.tavern_timer_var.set("刷新: {0:02d}:{1:02d}".format(m, s))
-
-    def _refresh_team_manage(self):
-        """刷新队伍管理面板"""
-        for w in self.team_manage_frame.winfo_children():
-            w.destroy()
-
-        team = self.game.get_team()
-        for i, m in enumerate(team):
-            fr = tk.Frame(self.team_manage_frame, relief="groove", bd=1, padx=6, pady=4)
-            fr.pack(fill="x", pady=2)
-            tag = "⭐ 主角" if i == 0 else "队员"
-            tk.Label(fr, text="{0} {1} Lv.{2} ATK:{3} DEF:{4}".format(
-                tag, m.role_name, m.level, m.get_total_attack(), m.get_total_defense()),
-                font=("Arial", 9), fg="#4E342E", anchor="w").pack(side="left")
-            if i > 0:
-                tk.Button(fr, text="踢出", command=lambda idx=i: self._kick_member(idx),
-                          font=("Arial", 8), bg="#F44336", fg="white",
-                          relief="groove", padx=6).pack(side="right")
-
-        # 状态
-        tk.Label(self.team_manage_frame, text="队伍: {0}/3人  共享背包/金币/材料".format(len(team)),
-                 font=("Arial", 8), fg="#8D6E63").pack(pady=2)
-
-    def _recruit_from_tavern(self, slot_idx):
-        """从酒馆招募指定槽位的角色"""
-        roster = self.game.get_tavern_roster()
-        if slot_idx >= len(roster):
-            return
-        r = roster[slot_idx]
-        ok, msg = self.game.recruit_member(r['role_name'], r['level'], r['cost'], r.get('gear', []))
-        if ok:
-            messagebox.showinfo("招募成功", msg)
-            self._refresh_team_manage()
-            self.refresh_ui()
-        else:
-            messagebox.showinfo("招募失败", msg)
-
-    def _kick_member(self, idx):
-        """踢出队友"""
-        ok, msg = self.game.kick_member(idx)
-        if ok:
-            self._refresh_team_manage()
-            self.refresh_ui()
-        else:
-            messagebox.showinfo("提示", msg)
-
-    def _do_tavern_refresh(self):
-        """手动刷新酒馆"""
-        ok, msg = self.game.manual_refresh_tavern()
-        if ok:
-            self._refresh_tavern_ui()
-            self.refresh_ui()
-        else:
-            messagebox.showinfo("刷新失败", msg)
 
 if __name__ == "__main__":
-    app = App()
-    app.run()
+    ft.run(main)

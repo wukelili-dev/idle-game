@@ -1,4 +1,4 @@
-"""
+﻿"""
 游戏核心模块 - 游戏逻辑主类
 """
 import time
@@ -1112,7 +1112,8 @@ class GameCore:
                 m.hp = m.get_max_hp_with_bonus() // 2
             self.add_log('  全体恢复: {0}/{1}'.format(
                 self.player.hp, self.player.get_max_hp_with_bonus()))
-            next_enemy, next
+            next_enemy, next_is_boss = get_random_enemy(self.current_map)
+            self.current_enemy = next_enemy
             self.current_enemy_is_boss = next_is_boss
             return False, 'Defeat'
 

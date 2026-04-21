@@ -1,6 +1,6 @@
-# 🎮 勇者工坊 (Hero Workshop)
+﻿# 🎮 勇者工坊 (Hero Workshop)
 
-一个基于 Python tkinter 的放置类游戏。
+一个基于 Python Flet 的放置类游戏（V5.1 起从 tkinter 迁移至 Flet 框架）。
 
 ## 功能特性
 
@@ -18,8 +18,10 @@
 
 ```bash
 cd D:\pyproject\hero_workshop
-python main.py
+python main_flet.py
 ```
+
+> 旧版 Tkinter 界面仍可通过 `python main.py` 启动，但不再维护。
 
 ## 项目结构
 
@@ -38,6 +40,9 @@ hero_workshop/
 │   ├── factory.py       # 工厂系统
 │   ├── tavern.py        # 酒馆系统
 │   └── inventory.py     # 背包系统（已在其他位置提到，保留）
+├── main_flet.py         # Flet 主入口（V5.1）
+├── main.py              # Tkinter 主入口（旧版，不再维护）
+├── FLET_MIGRATION_PLAN.md  # Flet 迁移计划
 ├── CHANGELOG.md         # 更新日志
 └── README.md            # 说明文档
 ```
@@ -45,6 +50,37 @@ hero_workshop/
 ---
 
 # 📜 更新日志
+
+## v5.1 (2026-04-21~22) - Flet 重构
+
+### 重大变更
+- **UI 框架迁移**: 从 tkinter 全面迁移至 Flet 0.84，界面现代化
+- **跨平台支持**: Flet 基于 Flutter WebView，支持 Windows/macOS/Linux
+
+### 新增功能
+- **农场加速按钮**: 种植中显示 ⚡ 按钮，消耗金币加速生长
+- **队伍战斗集成**: 自动战斗使用 `battle_team()` 全员参战
+
+### UI 改进
+- **三栏布局**: 左（资源/建筑/奇观）+ 中（英雄/战斗/日志）+ 右（商店/背包/酒馆/农场/工厂）
+- **Tab 系统**: 右侧 Notebook → Flet Tabs，武器/护甲/珍品/背包/材料/酒馆/农场/工厂
+- **底部战斗日志**: 独立日志面板，自动滚动
+- **窗口自适应**: 中栏 expand 撑满剩余空间
+- **字体美化**: 全局微软雅黑，字号统一+2px
+- **资源图标**: 木材🌲 铁矿⛏️ 皮革🧤 石头⛰️
+- **地图按钮**: 蓝底白字，与背景拉开对比度
+
+### Bug Fixes
+- **存档完整性**: 补全 factory 部门/工人、酒馆数据、自动药水阈值的存读档
+- **刷新敌人汉化**: "Gold not enough!" → "金币不足!"
+- **Flet 0.84 API 适配**: 清除全部 DeprecationWarning（Button/Padding/Border/Margin/Icons/Colors）
+- **Tabs 架构**: 适配 Flet 0.84 新 Tab API（TabBar + TabBarView）
+- **SnackBar**: 改用 overlay 模式（page.overlay.append）
+
+### 技术细节
+- 所有 game_core / modules 纯逻辑模块零改动，直接复用
+- main_flet.py 1210 行，覆盖原 main.py 1424 行全部功能
+- 异步主循环 `_update_loop` 每 0.3s 刷新 UI
 
 ## v5.0 (2026-04-21) - 酒馆/队友系统
 
