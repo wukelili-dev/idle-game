@@ -14,35 +14,27 @@ ROLE_NAME_POOL = [
     "游侠·云", "召唤师·灵", "刺客·霜", "圣骑士·盾",
 ]
 
-# 高级角色名（会自带装备）
+# 高级角色名（会自带装备，5级后出现）
 ELITE_ROLE_POOL = [
     "黄金圣骑·裁决", "暗影领主·噬", "苍穹龙将·霄",
     "修罗·杀", "天照·神", "不灭战魂·焚",
 ]
 
-# 武器名（高级角色自带）
+# 精英角色自带武器（仅史诗级，无传说）
 ELITE_WEAPONS = [
     {"name": "暗影巨剑", "attack": 25, "crit_rate": 18, "crit_dmg": 180, "rarity": "史诗", "rarity_color": "#9370DB", "sell_price": 120},
     {"name": "龙纹长弓", "attack": 22, "crit_rate": 25, "crit_dmg": 160, "rarity": "史诗", "rarity_color": "#9370DB", "sell_price": 110},
-    {"name": "雷霆法杖", "attack": 18, "crit_rate": 12, "crit_dmg": 200, "rarity": "传说", "rarity_color": "#FF8C00", "sell_price": 180},
-    {"name": "裂空之刃", "attack": 30, "crit_rate": 20, "crit_dmg": 170, "rarity": "传说", "rarity_color": "#FF8C00", "sell_price": 200},
-    {"name": "星陨战斧", "attack": 35, "crit_rate": 10, "crit_dmg": 220, "rarity": "传说", "rarity_color": "#FF8C00", "sell_price": 250},
+    {"name": "雷霆法杖", "attack": 18, "crit_rate": 12, "crit_dmg": 200, "rarity": "史诗", "rarity_color": "#9370DB", "sell_price": 115},
+    {"name": "裂空之刃", "attack": 28, "crit_rate": 15, "crit_dmg": 170, "rarity": "史诗", "rarity_color": "#9370DB", "sell_price": 125},
 ]
 
-# 护甲名（高级角色自带）
+# 精英角色自带护甲（仅史诗级，无传说）
 ELITE_ARMORS = [
     {"name": "玄武战甲", "defense": 28, "hp_bonus": 80, "rarity": "史诗", "rarity_color": "#9370DB", "sell_price": 130},
-    {"name": "天使羽衣", "defense": 20, "hp_bonus": 120, "rarity": "传说", "rarity_color": "#FF8C00", "sell_price": 200},
-    {"name": "龙魂胸甲", "defense": 35, "hp_bonus": 100, "rarity": "传说", "rarity_color": "#FF8C00", "sell_price": 220},
-    {"name": "暗影披风", "defense": 15, "hp_bonus": 150, "rarity": "史诗", "rarity_color": "#9370DB", "sell_price": 150},
-    {"name": "圣光护铠", "defense": 25, "hp_bonus": 90, "rarity": "传说", "rarity_color": "#FF8C00", "sell_price": 190},
+    {"name": "天使羽衣", "defense": 22, "hp_bonus": 110, "rarity": "史诗", "rarity_color": "#9370DB", "sell_price": 135},
+    {"name": "龙魂胸甲", "defense": 30, "hp_bonus": 90, "rarity": "史诗", "rarity_color": "#9370DB", "sell_price": 140},
+    {"name": "暗影披风", "defense": 15, "hp_bonus": 130, "rarity": "史诗", "rarity_color": "#9370DB", "sell_price": 120},
 ]
-
-# 精英角色自带装备配置
-ELITE_GEAR = {
-    "weapon": ELITE_WEAPONS,
-    "armor": ELITE_ARMORS,
-}
 
 
 def calc_recruit_cost(player_level, is_elite=False):
@@ -60,12 +52,13 @@ def calc_recruit_level(player_level):
 
 def generate_recruit(player_level):
     """生成一个可招募角色"""
-    is_elite = random.random() < 0.15  # 15%精英概率
+    # 精英角色（带装备）仅在主角5级后出现
+    can_be_elite = player_level >= 5
+    is_elite = can_be_elite and (random.random() < 0.15)  # 15%精英概率
     level = calc_recruit_level(player_level)
 
     if is_elite:
         role_name = random.choice(ELITE_ROLE_POOL)
-        # 精英角色自带装备
         wpn = random.choice(ELITE_WEAPONS)
         arm = random.choice(ELITE_ARMORS)
         equip_weapon = {
@@ -103,7 +96,7 @@ def generate_recruit(player_level):
         "level": level,
         "is_elite": is_elite,
         "cost": cost,
-        "gear": equip,   # 精英角色自带装备列表
+        "gear": equip,
     }
 
 
