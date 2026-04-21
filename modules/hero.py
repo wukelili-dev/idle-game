@@ -20,6 +20,8 @@ class Hero:
         self.kill_count = 0
         self.potions = 0
         self.inventory = Inventory()  # 背包对象
+        self.is_player = True   # True=主角，False=队友
+        self.role_name = "勇者"  # 显示名称
 
     def add_to_inventory(self, equip):
         """添加装备到背包"""
@@ -120,6 +122,23 @@ class Hero:
         """装备护甲"""
         self.armor = armor
 
+    def copy_for_recruit(self, level, role_name):
+        """创建队友（等级固定，无装备，共享背包）"""
+        recruit = Hero()
+        recruit.is_player = False
+        recruit.role_name = role_name
+        # 基础属性与等级挂钩
+        recruit.level = max(1, level)
+        recruit.max_hp = 80 + (recruit.level - 1) * 18
+        recruit.hp = recruit.max_hp
+        recruit.attack = 8 + (recruit.level - 1) * 2
+        recruit.defense = 4 + (recruit.level - 1) * 2
+        recruit.exp = 0
+        recruit.gold = 0
+        # 共享背包由 GameCore 管理，此处 inventory 不使用
+        recruit.inventory = None
+        return recruit
+
     def to_dict(self):
         """转换为字典（用于存档）"""
         return {
@@ -134,7 +153,9 @@ class Hero:
             "armor": self.armor,
             "kill_count": self.kill_count,
             "potions": self.potions,
-            "inventory": self.inventory.to_dict(),
+            "inventory": self.inventory.to_dict() if self.inventory else {},
+            "is_player": self.is_player,
+            "role_name": self.role_name,
         }
 
     def from_dict(self, data):
@@ -152,3 +173,5 @@ class Hero:
         self.potions = data.get("potions", 0)
         self.inventory = Inventory()
         self.inventory.from_dict(data.get("inventory", {}))
+        self.is_player = data.get("is_player", True)
+        self.role_name = data.get("role_name", "勇者")

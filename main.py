@@ -187,8 +187,42 @@ class App:
 
     # ── Center: Hero + 地图 + Battle ──
     def _build_center(self, parent):
-        # Hero stats
-        hf = ttk.LabelFrame(parent, text="\U0001F9D1 英雄属性", padding=8)
+        # 队伍切换面板
+        team_frame = ttk.LabelFrame(parent, text="\U0001F465 队伍", padding=6)
+        team_frame.pack(fill="x", padx=4, pady=(4, 3))
+
+        self.team_btn_vars = []   # 每个成员的按钮变量
+        self.team_name_labels = []
+        self.team_hp_labels = []
+        self.team_level_labels = []
+        for i in range(3):
+            bg = "#4CAF50" if i == 0 else ("#1565C0" if i == 1 else "#6A1B9A")
+            fg = "white"
+            name_var = tk.StringVar(value="---")
+            hp_var = tk.StringVar(value="--/--")
+            lvl_var = tk.StringVar(value="")
+            btn = tk.Button(team_frame, textvariable=name_var,
+                           command=lambda idx=i: self._switch_member(idx),
+                           font=("Arial", 9, "bold"), bg=bg, fg=fg,
+                           relief="groove", padx=6, pady=2, width=12)
+            btn.pack(side="left", padx=3)
+            hp_lbl = tk.Label(team_frame, textvariable=hp_var, font=("Arial", 8), width=9, anchor="w")
+            hp_lbl.pack(side="left", padx=2)
+            lvl_lbl = tk.Label(team_frame, textvariable=lvl_var, font=("Arial", 8), width=6, anchor="w")
+            lvl_lbl.pack(side="left", padx=2)
+            self.team_btn_vars.append(btn)
+            self.team_name_labels.append(name_var)
+            self.team_hp_labels.append(hp_var)
+            self.team_level_labels.append(lvl_var)
+
+        # 酒馆快捷入口
+        tk.Button(team_frame, text="🍺 酒馆",
+                  command=self._open_tavern_tab,
+                  font=("Arial", 9), bg="#8D6E63", fg="white",
+                  relief="groove", padx=8).pack(side="right", padx=4)
+
+        # Hero stats（跟随当前选中成员）
+        hf = self.hero_lbl_frame = ttk.LabelFrame(parent, text="\U0001F9D1 英雄属性", padding=8)
         hf.pack(fill="x", padx=4, pady=(4, 3))
 
         self.hp_var = tk.StringVar(value="生命: 100/100")
@@ -326,6 +360,11 @@ class App:
         self._build_novelty_shop(ntab)
 
         # ── Farm Tab ──
+        # Tavern Tab
+        ttab = tk.Frame(nb)
+        nb.add(ttab, text="\U0001F37A Tavern ")
+        self._build_tavern_tab(ttab)
+
         self.farm_tab = tk.Frame(nb)
         nb.add(self.farm_tab, text=" \U0001F31F Farm ")
         self._build_farm_tab(self.farm_tab)
@@ -792,7 +831,7 @@ class App:
     def _battle_wrapper(self, enemy, is_boss=False):
         self.root.after(0, lambda: self.battle_btn.config(state="disabled"))
         try:
-            result, msg = self.game.battle(enemy, is_boss=is_boss)
+            result, msg = self.game.battle_team(enemy, is_boss=is_boss)
         except Exception as e:
             self.game.add_log(f"Battle error: {e}")
         finally:
@@ -962,20 +1001,50 @@ class App:
             self.gold_label.config(text=f"🪙 {self.game.player.gold}")
             self.kills_label.config(text=f"击杀: {self.game.player.kill_count}")
 
-            # Hero
-            p = self.game.player
+            # 队伍面板
+            team = self.game.get_team()
+            for i in range(3):
+                if i < len(team):
+                    m = team[i]
+                    max_hp = m.get_max_hp_with_bonus()
+                    self.team_name_labels[i].set(m.role_name)
+                    self.team_hp_labels[i].set("{0}/{1}".format(m.hp, max_hp))
+                    self.team_level_labels[i].set("Lv.{0}".format(m.level))
+                    # 当前选中高亮
+                    if i == self.game.current_member_idx:
+                        bg = "#FF5722"
+                    elif i == 0:
+                        bg = "#4CAF50"
+                    elif i == 1:
+                        bg = "#1565C0"
+                    else:
+                        bg = "#6A1B9A"
+                    self.team_btn_vars[i].config(bg=bg)
+                else:
+                    self.team_name_labels[i].set("空位")
+                    self.team_hp_labels[i].set("--/--")
+                    self.team_level_labels[i].set("")
+                    self.team_btn_vars[i].config(bg="#9E9E9E")
+
+            # Hero（当前选中成员）
+            p = self.game.get_current_member()
             max_hp = p.get_max_hp_with_bonus()
-            self.hp_var.set(f"生命: {p.hp}/{max_hp}")
-            self.attack_var.set(f"攻击: {p.get_total_attack()}")
-            self.defense_var.set(f"防御: {p.get_total_defense()}")
-            self.crit_var.set(f"CRIT: {p.get_crit_rate()}%")
-            self.level_var.set(f"Lv.{p.level}")
-            self.exp_var.set(f"经验: {p.exp}/{p.level * 100}")
+            self.hero_lbl_frame.config(text="\U0001F9D1 {0} Lv.{1}".format(p.role_name, p.level))
+            self.hp_var.set("生命: {0}/{1}".format(p.hp, max_hp))
+            self.attack_var.set("攻击: {0}".format(p.get_total_attack()))
+            self.defense_var.set("防御: {0}".format(p.get_total_defense()))
+            self.crit_var.set("CRIT: {0}%".format(p.get_crit_rate()))
+            self.level_var.set("Lv.{0}".format(p.level))
+            self.exp_var.set("经验: {0}/{1}".format(p.exp, p.level * 100))
             w_name = p.weapon["name"] if p.weapon and isinstance(p.weapon, dict) else "None"
             a_name = p.armor["name"] if p.armor and isinstance(p.armor, dict) else "None"
-            self.weapon_var.set(f"武器: {w_name}")
-            self.armor_var.set(f"护甲: {a_name}")
-            self.potions_var.set(f"x{p.potions}")
+            self.weapon_var.set("武器: {0}".format(w_name))
+            self.armor_var.set("护甲: {0}".format(a_name))
+            # 药水数量
+            if p.is_player:
+                self.potions_var.set("x{0}".format(p.potions))
+            else:
+                self.potions_var.set("队友")
 
             # 地图
             self.map_var.set(self.game.current_map)
@@ -1097,6 +1166,9 @@ class App:
             "factory_workers": self.game.factory_workers,
             "factory_last_profit_time": getattr(self.game, "factory_last_profit_time", 0),
             "auto_potion_threshold": self.game.auto_potion_threshold,
+            "team": self.game.team_to_dict(),
+            "tavern": self.game.tavern_to_dict(),
+            "current_member_idx": self.game.current_member_idx,
         }
         with open("D:\\pyproject\\hero_workshop\\save.json", "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -1124,6 +1196,9 @@ class App:
         self.game.factory_workers = data.get("factory_workers", 0)
         self.game.factory_last_profit_time = data.get("factory_last_profit_time", 0)
         self.game.auto_potion_threshold = data.get("auto_potion_threshold", 0)
+        self.game.team_from_dict(data.get("team", []))
+        self.game.tavern_from_dict(data.get("tavern", []))
+        self.game.current_member_idx = data.get("current_member_idx", 0)
         for wn in self.game.wonders:
             if wn in self.wonder_buttons:
                 self.wonder_buttons[wn].config(text=f"\u2705 {wn}", state="disabled")
@@ -1153,7 +1228,196 @@ Click Battle or 自动战斗 to fight!"""
         self.root.mainloop()
 
 
-# ── Novelty Shop Items ──
+
+
+
+    
+
+
+    
+
+
+    def _switch_member(self, idx):
+        """切换当前选中的队伍成员"""
+        ok, msg = self.game.switch_member(idx)
+        if not ok:
+            messagebox.showinfo("提示", msg)
+        else:
+            self.refresh_ui()
+
+    # ═══════════════════ V5.0 酒馆 UI ═══════════════════
+
+    def _open_tavern_tab(self):
+        """快捷打开酒馆 tab"""
+        # 找到 right notebook，切换到酒馆 tab（最后一个 tab 之前是酒馆）
+        # 酒馆在 farm 之前，所以是倒数第2个
+        nb = self.right_notebook
+        for i in range(nb.index('end')):
+            txt = nb.tab(i, 'text')
+            if 'Tvern' in txt or '\U0001F37A' in txt or '酒馆' in txt:
+                nb.select(i)
+                return
+        # fallback: 选第6个tab
+        if nb.index('end') >= 6:
+            nb.select(6)
+
+    def _build_tavern_tab(self, parent):
+        """构建酒馆 tab UI"""
+        # 顶部信息栏
+        info = tk.Frame(parent, bg="#3E2723", pady=4)
+        info.pack(fill="x")
+        self.tavern_gold_var = tk.StringVar(value="🪙 100G")
+        self.tavern_timer_var = tk.StringVar(value="刷新: --:--")
+        tk.Label(info, textvariable=self.tavern_gold_var, font=("Arial", 11, "bold"),
+                 fg="#FFD700", bg="#3E2723").pack(side="left", padx=10)
+        tk.Label(info, textvariable=self.tavern_timer_var, font=("Arial", 9),
+                 fg="#FFCC80", bg="#3E2723").pack(side="right", padx=10)
+        tk.Button(info, text="🔄 手动刷新 (50G)", command=self._do_tavern_refresh,
+                  font=("Arial", 9), bg="#795548", fg="white",
+                  relief="groove").pack(side="right", padx=8)
+
+        # 队友列表区域
+        tk.Label(parent, text="── 可招募角色 ──", font=("Arial", 10, "bold"),
+                 fg="#5D4037").pack(pady=(8, 4))
+
+        self.tavern_frames = []
+        self.tavern_recruit_btns = []
+        self.tavern_role_labels = []
+        self.tavern_cost_labels = []
+        self.tavern_gear_labels = []
+
+        for i in range(3):
+            fr = tk.Frame(parent, relief="groove", bd=1, padx=8, pady=6)
+            fr.pack(fill="x", padx=8, pady=3)
+
+            role_var = tk.StringVar(value="--- (空位)")
+            cost_var = tk.StringVar(value="")
+            gear_var = tk.StringVar(value="")
+            lvl_var = tk.StringVar(value="")
+
+            rl = tk.Label(fr, textvariable=role_var, font=("Arial", 10, "bold"), fg="#4E342E", anchor="w")
+            rl.pack(anchor="w")
+            ll = tk.Label(fr, textvariable=lvl_var, font=("Arial", 9), fg="#6D4C41", anchor="w")
+            ll.pack(anchor="w")
+            gl = tk.Label(fr, textvariable=gear_var, font=("Arial", 8), fg="#8D6E63", anchor="w")
+            gl.pack(anchor="w")
+
+            bottom = tk.Frame(fr)
+            bottom.pack(fill="x", pady=(4, 0))
+            cl = tk.Label(bottom, textvariable=cost_var, font=("Arial", 10, "bold"), fg="#E65100", width=10)
+            cl.pack(side="left")
+            rb = tk.Button(bottom, text="招募", command=lambda idx=i: self._recruit_from_tavern(idx),
+                           font=("Arial", 9, "bold"), bg="#4CAF50", fg="white",
+                           relief="groove", padx=10)
+            rb.pack(side="right")
+
+            self.tavern_frames.append(fr)
+            self.tavern_role_labels.append(role_var)
+            self.tavern_cost_labels.append(cost_var)
+            self.tavern_gear_labels.append(gear_var)
+            self.tavern_recruit_btns.append(rb)
+
+        # 当前队友管理
+        sep = tk.Frame(parent, bg="#BCAAA4", height=2)
+        sep.pack(fill="x", padx=8, pady=(12, 4))
+        tk.Label(parent, text="── 队伍管理 ──", font=("Arial", 10, "bold"), fg="#5D4037").pack(pady=4)
+
+        self.team_manage_frame = tk.Frame(parent)
+        self.team_manage_frame.pack(fill="x", padx=8, pady=4)
+        self._refresh_team_manage()
+
+        # 刷新酒馆数据
+        self._refresh_tavern_ui()
+
+    def _refresh_tavern_ui(self):
+        """刷新酒馆UI"""
+        if not hasattr(self, 'tavern_role_labels'):
+            return
+        roster = self.game.get_tavern_roster()
+        for i in range(3):
+            if i < len(roster):
+                r = roster[i]
+                self.tavern_role_labels[i].set("{0} ({1})".format(
+                    r['role_name'],
+                    '高级' if r.get('premium') else '普通'))
+                self.tavern_cost_labels[i].set("{0}G".format(r['cost']))
+                gear = r.get('gear', [])
+                if gear:
+                    gear_names = ', '.join(['{0}({1})'.format(eq['name'], eq.get('rarity', '普通')) for eq in gear])
+                    self.tavern_gear_labels[i].set("装备: " + gear_names)
+                else:
+                    self.tavern_gear_labels[i].set("装备: 无")
+                self.tavern_recruit_btns[i].config(state="normal")
+                self.tavern_frames[i].config(bg="#EFEBE9")
+            else:
+                self.tavern_role_labels[i].set("--- (空位)")
+                self.tavern_cost_labels[i].set("")
+                self.tavern_gear_labels[i].set("")
+                self.tavern_recruit_btns[i].config(state="disabled")
+                self.tavern_frames[i].config(bg="#F5F5F5")
+
+        # 刷新金币显示
+        self.tavern_gold_var.set("🪙 {0}G".format(self.game.player.gold))
+
+        # 刷新倒计时
+        left = self.game.get_tavern_time_left()
+        m, s = divmod(left, 60)
+        self.tavern_timer_var.set("刷新: {0:02d}:{1:02d}".format(m, s))
+
+    def _refresh_team_manage(self):
+        """刷新队伍管理面板"""
+        for w in self.team_manage_frame.winfo_children():
+            w.destroy()
+
+        team = self.game.get_team()
+        for i, m in enumerate(team):
+            fr = tk.Frame(self.team_manage_frame, relief="groove", bd=1, padx=6, pady=4)
+            fr.pack(fill="x", pady=2)
+            tag = "⭐ 主角" if i == 0 else "队员"
+            tk.Label(fr, text="{0} {1} Lv.{2} ATK:{3} DEF:{4}".format(
+                tag, m.role_name, m.level, m.get_total_attack(), m.get_total_defense()),
+                font=("Arial", 9), fg="#4E342E", anchor="w").pack(side="left")
+            if i > 0:
+                tk.Button(fr, text="踢出", command=lambda idx=i: self._kick_member(idx),
+                          font=("Arial", 8), bg="#F44336", fg="white",
+                          relief="groove", padx=6).pack(side="right")
+
+        # 状态
+        tk.Label(self.team_manage_frame, text="队伍: {0}/3人  共享背包/金币/材料".format(len(team)),
+                 font=("Arial", 8), fg="#8D6E63").pack(pady=2)
+
+    def _recruit_from_tavern(self, slot_idx):
+        """从酒馆招募指定槽位的角色"""
+        roster = self.game.get_tavern_roster()
+        if slot_idx >= len(roster):
+            return
+        r = roster[slot_idx]
+        ok, msg = self.game.recruit_member(r['role_name'], r['level'], r['cost'], r.get('gear', []))
+        if ok:
+            messagebox.showinfo("招募成功", msg)
+            self._refresh_team_manage()
+            self.refresh_ui()
+        else:
+            messagebox.showinfo("招募失败", msg)
+
+    def _kick_member(self, idx):
+        """踢出队友"""
+        ok, msg = self.game.kick_member(idx)
+        if ok:
+            self._refresh_team_manage()
+            self.refresh_ui()
+        else:
+            messagebox.showinfo("提示", msg)
+
+    def _do_tavern_refresh(self):
+        """手动刷新酒馆"""
+        ok, msg = self.game.manual_refresh_tavern()
+        if ok:
+            self._refresh_tavern_ui()
+            self.refresh_ui()
+        else:
+            messagebox.showinfo("刷新失败", msg)
+
 if __name__ == "__main__":
     app = App()
     app.run()

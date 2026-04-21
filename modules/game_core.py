@@ -12,6 +12,7 @@ from .equipment_drops import generate_drop, get_drop_summary
 from .inventory import NOVELTY_ITEMS
 from .plants import (get_plant_catalog, get_plant_by_id, calc_grow_stage,
                      STAGE_NAMES, STAGE_ICONS, MAX_PLANTS)
+from .tavern import (generate_tavern_roster, tavern_roster_to_dict, tavern_roster_from_dict)
 from .factory import (FACTORY_BUILD_COST, FACTORY_BASE_INTERVAL_S,
                       FACTORY_BASE_PROFIT, DEPARTMENTS, MAX_FACTORY_WORKERS,
                       FACTORY_WORKER_COST_GOLD, get_dept_by_id,
@@ -39,6 +40,12 @@ class GameCore:
         self.logs = []
         self.production_active = set()
         self.wonders = {}  # 已建造的奇观 {name: True}
+        # ── 队伍系统 ──
+        self.team = [self.player]   # 队伍列表，index 0 是主角
+        self.current_member_idx = 0  # 当前选中的队友索引（UI切换用）
+        # ── 酒馆系统 ──
+        self.tavern_roster = generate_tavern_roster(self.player.level)  # 当前可招募角色
+        self.tavern_last_refresh = time.time()  # 上次刷新时间戳
         self.wage_thread = None  # 工资支付线程
         self._start_wage_system()  # 启动工资系统
 
@@ -758,9 +765,10 @@ class GameCore:
             if not self.is_battling:
                 # 随机获取敌人，有5%概率遇到BOSS
                 from .maps import get_random_enemy
+                self.try_refresh_tavern()
                 enemy, is_boss = get_random_enemy(self.current_map)
                 if enemy:
-                    result, msg = self.battle(enemy, is_boss=is_boss)
+                    result, msg = self.battle_team(enemy, is_boss=is_boss)
                     self.is_battling = False
                 else:
                     self.add_log("没有可用敌人!")
@@ -898,3 +906,247 @@ class GameCore:
         self.player.gold += price
         self.add_log(f"💰 出售 {amount} {material} 获得 {price}G")
         return True, f"出售成功! +{price}G"
+
+    # ═══════════════════ 队伍系统 ═══════════════════
+
+    def get_team(self):
+        """返回队伍列表（包含主角）"""
+        return self.team
+
+    def get_current_member(self):
+        """返回当前选中的成员"""
+        if 0 <= self.current_member_idx < len(self.team):
+            return self.team[self.current_member_idx]
+        return self.player
+
+    def switch_member(self, idx):
+        """切换当前选中的队伍成员"""
+        if idx < 0 or idx >= len(self.team):
+            return False, '无效成员'
+        self.current_member_idx = idx
+        member = self.team[idx]
+        self.add_log('切换到: {0} Lv.{1}'.format(member.role_name, member.level))
+        return True, '已切换到 {0}'.format(member.role_name)
+
+    def recruit_member(self, role_name, level, cost, gear):
+        """招募队友（从酒馆）"""
+        if len(self.team) >= 3:
+            return False, '队伍已满! 最多3人'
+        if self.player.gold < cost:
+            return False, '金币不足! 需要 {0}G'.format(cost)
+        self.player.gold -= cost
+
+        from .hero import Hero
+        new_member = Hero().copy_for_recruit(level, role_name)
+        for eq in gear:
+            self.player.inventory.add(eq)
+            self.add_log('  获得装备: {0} ({1})'.format(eq['name'], eq.get('rarity', '普通')))
+
+        self.team.append(new_member)
+        self.add_log('招募了队友: {0} Lv.{1}'.format(role_name, level))
+        return True, '招募成功! {0} 加入队伍!'.format(role_name)
+
+    def kick_member(self, idx):
+        """踢出队友（idx 0 为主角，不能踢）"""
+        if idx == 0:
+            return False, '不能踢出主角!'
+        if idx < 0 or idx >= len(self.team):
+            return False, '无效成员'
+        name = self.team[idx].role_name
+        del self.team[idx]
+        if self.current_member_idx >= len(self.team):
+            self.current_member_idx = len(self.team) - 1
+        self.add_log('{0} 已离队'.format(name))
+        return True, '{0} 已离队'.format(name)
+
+    def heal_full_team(self):
+        """全体满血"""
+        for m in self.team:
+            m.hp = m.get_max_hp_with_bonus()
+
+    # ═══════════════════ 酒馆系统 ═══════════════════
+
+    def get_tavern_roster(self):
+        """返回当前酒馆可招募角色"""
+        return self.tavern_roster
+
+    def try_refresh_tavern(self):
+        """尝试刷新酒馆（每隔1小时自动刷新）"""
+        now = time.time()
+        auto = False
+        if now - self.tavern_last_refresh >= 3600:
+            auto = True
+            self._do_tavern_refresh()
+        return auto
+
+    def _do_tavern_refresh(self):
+        """执行酒馆刷新"""
+        existing = {m.role_name for m in self.team}
+        self.tavern_roster = generate_tavern_roster(self.player.level, existing)
+        self.tavern_last_refresh = time.time()
+        self.add_log('酒馆刷新了! (新角色登场)')
+
+    def manual_refresh_tavern(self):
+        """手动刷新酒馆（消耗50G）"""
+        if self.player.gold < 50:
+            return False, '金币不足! 需要50G刷新酒馆'
+        self.player.gold -= 50
+        self._do_tavern_refresh()
+        return True, '酒馆已刷新!'
+
+    def get_tavern_time_left(self):
+        """距离下次自动刷新的秒数"""
+        elapsed = time.time() - self.tavern_last_refresh
+        return max(0, int(3600 - elapsed))
+
+    # ═══════════════════ 队伍战斗逻辑 ═══════════════════
+
+    def battle_team(self, enemy_data, is_boss=False):
+        """队伍战斗（多人轮流出击）"""
+        if self.is_battling:
+            return False, '战斗中...'
+
+        self.heal_full_team()
+        self.is_battling = True
+        e_hp = enemy_data['hp']
+        boss_tag = ' [BOSS]' if is_boss else ''
+        self.add_log('队伍战斗: 群雄 vs {0}{1}'.format(enemy_data['name'], boss_tag))
+
+        while e_hp > 0:
+            alive = [m for m in self.team if m.hp > 0]
+            if not alive:
+                break
+
+            for member in self.team:
+                if e_hp <= 0:
+                    break
+                if member.hp <= 0:
+                    continue
+
+                p_dmg = max(1, member.get_total_attack() - enemy_data['defense'] // 2 + random.randint(-3, 3))
+                is_crit = random.randint(1, 100) <= member.get_crit_rate()
+                if is_crit:
+                    p_dmg = int(p_dmg * 1.5)
+                    self.add_log('  {0} 暴击! {1} 伤害!'.format(member.role_name, p_dmg))
+                else:
+                    self.add_log('  {0} 攻击 {1} 伤害'.format(member.role_name, p_dmg))
+                e_hp -= p_dmg
+
+                for slot in [member.weapon, member.armor]:
+                    if isinstance(slot, dict) and slot.get('special', {}).get('name') == '吸血':
+                        heal = int(p_dmg * slot['special']['value'] / 100)
+                        if heal > 0:
+                            member.heal(heal)
+                            self.add_log('  {0} 吸血 +{1} HP'.format(member.role_name, heal))
+
+                if e_hp <= 0:
+                    break
+
+            if e_hp <= 0:
+                break
+
+            alive = [m for m in self.team if m.hp > 0]
+            if not alive:
+                break
+            target = random.choice(alive)
+            e_dmg = max(1, enemy_data['attack'] - target.get_total_defense() // 2 + random.randint(-2, 2))
+            target.take_damage(e_dmg)
+            self.add_log('  {0} 攻击 {1} -{2} HP'.format(enemy_data['name'], target.role_name, e_dmg))
+
+            if target.is_player:
+                self._try_auto_potion()
+
+            for m in self.team:
+                if m.hp <= 0 and not getattr(m, '_died_reported', False):
+                    self.add_log('  {0} 倒下了!'.format(m.role_name))
+                    m._died_reported = True
+
+            time.sleep(0.3)
+
+        self.is_battling = False
+        alive = [m for m in self.team if m.hp > 0]
+
+        if alive and e_hp <= 0:
+            self.add_log('胜利! 击败 {0}!'.format(enemy_data['name']))
+            total_exp = enemy_data['exp']
+            exp_per = total_exp // len(self.team)
+            for m in self.team:
+                m._died_reported = False
+                msgs = m.gain_exp(exp_per)
+                for msg in msgs:
+                    self.add_log('  {0}'.format(msg))
+            self.player.gold += enemy_data['gold']
+            self.add_log('  +{0} 经验(平分) +{1}G'.format(total_exp, enemy_data['gold']))
+            for item, amount in enemy_data['drops'].items():
+                self.resources[item] = self.resources.get(item, 0) + amount
+                self.add_log('  +{0} {1}'.format(amount, item))
+
+            drop = generate_drop(enemy_data.get('level', 1), is_boss)
+            if drop:
+                drop['sell_price'] = self._calc_drop_sell_price(drop)
+                self.player.inventory.add(drop)
+                summary = get_drop_summary(drop)
+                self.add_log('  获得装备: {0}'.format(summary))
+
+            if random.random() < 0.3:
+                item = random.choice(NOVELTY_ITEMS)
+                novelty = {
+                    'name': item['name'], 'type': 'novelty', 'desc': item['desc'],
+                    'price': item['price'], 'rarity_idx': item.get('rarity_idx', 0),
+                    'sell_price': int(item['price'] * 0.8),
+                }
+                self.player.inventory.add(novelty)
+                self.add_log('  捡到小物件: {0}'.format(item['name']))
+
+            next_enemy, next_is_boss = get_random_enemy(self.current_map)
+            self.current_enemy = next_enemy
+            self.current_enemy_is_boss = next_is_boss
+            return True, 'Victory'
+        else:
+            for m in self.team:
+                m._died_reported = False
+            self.add_log('队伍全灭! 被 {0} 击败...'.format(enemy_data['name']))
+            for m in self.team:
+                m.hp = m.get_max_hp_with_bonus() // 2
+            self.add_log('  全体恢复: {0}/{1}'.format(
+                self.player.hp, self.player.get_max_hp_with_bonus()))
+            next_enemy, next_is_boss = get_random_enemy(self.current_map)
+            self.current_enemy = next_enemy
+            self.current_enemy_is_boss = next_is_boss
+            return False, 'Defeat'
+
+    # ═══════════════════ 存档扩展 ═══════════════════
+
+    def team_to_dict(self):
+        """队伍序列化"""
+        return {
+            'members': [m.to_dict() for m in self.team],
+            'current_idx': self.current_member_idx,
+        }
+
+    def team_from_dict(self, data):
+        """队伍反序列化"""
+        from .hero import Hero
+        members = data.get('members', [])
+        self.team = []
+        for md in members:
+            h = Hero()
+            h.from_dict(md)
+            self.team.append(h)
+        self.current_member_idx = data.get('current_idx', 0)
+        if not self.team:
+            self.team = [self.player]
+        if self.current_member_idx >= len(self.team):
+            self.current_member_idx = 0
+
+    def tavern_to_dict(self):
+        """酒馆状态序列化"""
+        return {
+            'roster': tavern_roster_to_dict(self.tavern_roster),
+            'last_refresh': self.tavern_last_refresh,
+        }
+
+    def tavern_from_dict(self, data):
+        """酒馆状态反序列化"""
+        self.tavern_roster = tavern_roster_from_dict(data.get('roster', []))
+        self.tavern_last_refresh = data.get('last_refresh', time.time())
