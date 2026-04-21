@@ -156,7 +156,7 @@ class App:
             count_lbl = tk.Label(hdr, text="x0", font=("Arial", 9), fg="#888")
             count_lbl.pack(side="right")
 
-            info_lbl = tk.Label(bframe, text="未建造", font=("Arial", 8), fg="#aaa")
+            info_lbl = tk.Label(bframe, text="not built", font=("Arial", 8), fg="#aaa")
             info_lbl.pack(anchor="w", padx=6)
 
             build_btn = tk.Button(bframe, text="建造",
@@ -323,7 +323,7 @@ class App:
         # Novelty shop tab
         ntab = tk.Frame(nb)
         nb.add(ntab, text=" \U0001F3FA Novelty ")
-        self._build_杂货_shop(ntab)
+        self._build_novelty_shop(ntab)
 
         # ── Farm Tab ──
         self.farm_tab = tk.Frame(nb)
@@ -374,7 +374,7 @@ class App:
         return " ".join(f"{m.get(k, k)}{v}" for k, v in cost.items())
 
     # ── Novelty Shop ──
-    def _build_杂货_shop(self, parent):
+    def _build_novelty_shop(self, parent):
         canvas = tk.Canvas(parent, highlightthickness=0)
         sb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=sb.set)
@@ -418,12 +418,12 @@ class App:
                      fg="#666", anchor="w").pack(fill="x", padx=6, pady=(0, 4))
 
             # 购买 button
-            tk.Button(frame, text="购买", command=lambda it=item: self.buy_杂货(it),
+            tk.Button(frame, text="购买", command=lambda it=item: self.buy_novelty(it),
                       bg=color, fg="white", font=("Arial", 8, "bold"),
                       relief="groove", padx=8).pack(side="right", padx=6, pady=4)
 
-    def buy_杂货(self, item):
-        ok, msg = self.game.buy_杂货_item(item)
+    def buy_novelty(self, item):
+        ok, msg = self.game.buy_novelty_item(item)
         self.game.add_log(msg)
         self.refresh_ui()
 
@@ -557,7 +557,7 @@ class App:
         top = tk.Frame(parent)
         top.pack(fill="x", padx=6, pady=4)
         tk.Label(top, text="🏭 工厂", font=("Arial", 11, "bold")).pack(side="left")
-        self.factory_status_lbl = tk.Label(top, text="未建造",
+        self.factory_status_lbl = tk.Label(top, text="not built",
                                             font=("Arial", 10), fg="#c00")
         self.factory_status_lbl.pack(side="right")
 
@@ -591,7 +591,7 @@ class App:
 
             if g.factory is None:
                 # 建造按钮
-                tk.Label(self.factory_body, text="工厂尚未建造!",
+                tk.Label(self.factory_body, text="工厂尚not built!",
                          font=("Arial", 10), fg="#888").pack(pady=8)
                 cost_str = " ".join(f"{k}{v}" for k, v in FACTORY_BUILD_COST.items())
                 tk.Label(self.factory_body, text=f"费用: {cost_str}",
@@ -619,7 +619,7 @@ class App:
                 cost_str = " | ".join(cost_parts) if cost_parts else "Free"
                 bg = "#E8F5E9" if built else "#ECEFF1"
                 text = f"{'✅' if built else '🔒'} {dept['name']} — {dept['desc']} [{cost_str}]"
-                cmd = (lambda d=dept: self._buy_dept(d["id"])) if 未建造 else None
+                cmd = (lambda d=dept: self._buy_dept(d["id"])) if not built else None
                 btn = tk.Button(depts_frame, text=text, font=("Consolas", 9), bg=bg,
                                  fg="#333", anchor="w", relief="groove", padx=8,
                                  command=cmd)
@@ -858,8 +858,8 @@ class App:
             self.wonder_buttons[wonder_name].config(text=f"\u2705 {wonder_name}", state="disabled")
         self.refresh_ui()
 
-    def use_杂货_item(self, idx):
-        ok, msg = self.game.use_杂货_item(idx)
+    def use_novelty_item(self, idx):
+        ok, msg = self.game.use_novelty_item(idx)
         self.game.add_log(msg)
         self.refresh_ui()
 
@@ -911,7 +911,7 @@ class App:
                 self.building_widgets[bname]["info"].config(
                     text=f"Avg: {avg_output}/{avg_interval}s | \u26CF{total_workers}/{total_max}")
             else:
-                self.building_widgets[bname]["info"].config(text="未建造")
+                self.building_widgets[bname]["info"].config(text="not built")
 
             # 快照对比：只有结构变化时才重建按钮
             workers_snap = tuple(
@@ -1015,7 +1015,7 @@ class App:
                             # 植物种子：E按钮改为种植
                             slot["btn_e"].config(state="normal", bg="#4CAF50", fg="white",
                                               activebackground="#388E3C",
-                                              command=lambda idx=i: self.use_杂货_item(idx))
+                                              command=lambda idx=i: self.use_novelty_item(idx))
                         else:
                             # 其他杂货：E禁用
                             slot["btn_e"].config(state="disabled", bg="#BDBDBD", activebackground="#BDBDBD",
