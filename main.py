@@ -197,7 +197,7 @@ class HeroWorkshopApp:
         )
 
     def _build_center(self):
-        col = ft.Column(spacing=4, scroll="auto", expand=True)
+        col = ft.Column(spacing=6, expand=True)
 
         # Team row
         team_row = ft.Row(spacing=4)
@@ -304,7 +304,7 @@ class HeroWorkshopApp:
                 ft.Text("\U0001f4cb \u6218\u6597\u65e5\u5fd7", size=14, weight=ft.FontWeight.BOLD),
                 ft.Container(content=self.log_view,
                              border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
-                             border_radius=4, padding=4, expand=True, height=160),
+                             border_radius=4, padding=4, expand=True),
             ], spacing=4),
             padding=4,
         ))
@@ -534,17 +534,16 @@ class HeroWorkshopApp:
     def _build_materials_tab(self):
         # 材料类型: Wood, Iron, Leather, Stone
         mat_rows = []
-        mats = ["Wood", "Iron", "Leather", "Stone"]
-        mat_buy_prices = {"Wood": 4, "Iron": 6, "Leather": 4, "Stone": 2}
-        mat_sell_prices = {"Wood": 2, "Iron": 3, "Leather": 2, "Stone": 1}
-        mat_names_cn = {"Wood": "\u6728\u6750", "Iron": "\u94c1\u77ff", "Leather": "\u76ae\u9769", "Stone": "\u77f3\u5934"}
+        mats = ["木材", "铁矿", "皮革", "石头"]
+        mat_buy_prices = {"木材": 4, "铁矿": 6, "皮革": 4, "石头": 2}
+        mat_sell_prices = {"木材": 2, "铁矿": 3, "皮革": 2, "石头": 1}
         self._mat_buy_btns = {}
         self._mat_sell_btns = {}
         for mat in mats:
             ctr = ft.Container(
                 content=ft.Column([
                     ft.Row([
-                        ft.Text(mat_names_cn[mat], size=13, weight=ft.FontWeight.BOLD),
+                        ft.Text(mat, size=13, weight=ft.FontWeight.BOLD),
                         self._ref(f"mat_{mat}_cnt", ft.Text("x0", size=12, color=Cs("GREY_400"))),
                     ], spacing=8),
                     ft.Row([
@@ -575,11 +574,11 @@ class HeroWorkshopApp:
         self._refresh_all_ui()
 
     def _refresh_materials(self):
-        mats = ["Wood", "Iron", "Leather", "Stone"]
+        mats = ["木材", "铁矿", "皮革", "石头"]
         for mat in mats:
             cnt_lbl = self._refs.get(f"mat_{mat}_cnt")
             if cnt_lbl:
-                cnt_lbl.value = "x" + str(self.game.player.resources.get(mat, 0))
+                cnt_lbl.value = "x" + str(self.game.resources.get(mat, 0))
 
 
     def _build_tavern_tab(self):
@@ -936,6 +935,10 @@ class HeroWorkshopApp:
                     ], spacing=4, alignment=ft.alignment.Alignment(-1, 0)),
                     padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4,
                     bgcolor="#fff8e1" if i == g.current_member_idx else None))
+
+        # 刷新背包和材料（修复战斗掉落后UI不同步）
+        self._refresh_bag()
+        self._refresh_materials()
 
     # ─── Actions ────────────────────────────────────────────────
     def _do_battle(self, e=None):
