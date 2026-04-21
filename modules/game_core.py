@@ -1002,7 +1002,7 @@ class GameCore:
     # ═══════════════════ 队伍战斗逻辑 ═══════════════════
 
     def battle_team(self, enemy_data, is_boss=False):
-        """队伍战斗（多人轮流出击）"""
+        """队伍战斗（全员随机顺序攻击，怪物随机目标）"""
         if self.is_battling:
             return False, '战斗中...'
 
@@ -1013,11 +1013,13 @@ class GameCore:
         self.add_log('队伍战斗: 群雄 vs {0}{1}'.format(enemy_data['name'], boss_tag))
 
         while e_hp > 0:
+            # ---- 队友全员攻击阶段（随机顺序）----
             alive = [m for m in self.team if m.hp > 0]
             if not alive:
                 break
 
-            for member in self.team:
+            random.shuffle(alive)  # 随机攻击顺序
+            for member in alive:
                 if e_hp <= 0:
                     break
                 if member.hp <= 0:
@@ -1029,9 +1031,10 @@ class GameCore:
                     p_dmg = int(p_dmg * 1.5)
                     self.add_log('  {0} 暴击! {1} 伤害!'.format(member.role_name, p_dmg))
                 else:
-                    self.add_log('  {0} 攻击 {1} 伤害'.format(member.role_name, p_dmg))
+                    self.add_log('  {0} 攻击造成 {1} 伤害'.format(member.role_name, p_dmg))
                 e_hp -= p_dmg
 
+                # 吸血效果
                 for slot in [member.weapon, member.armor]:
                     if isinstance(slot, dict) and slot.get('special', {}).get('name') == '吸血':
                         heal = int(p_dmg * slot['special']['value'] / 100)
@@ -1039,12 +1042,10 @@ class GameCore:
                             member.heal(heal)
                             self.add_log('  {0} 吸血 +{1} HP'.format(member.role_name, heal))
 
-                if e_hp <= 0:
-                    break
-
             if e_hp <= 0:
                 break
 
+            # ---- 怪物攻击阶段（随机目标）----
             alive = [m for m in self.team if m.hp > 0]
             if not alive:
                 break
@@ -1056,6 +1057,7 @@ class GameCore:
             if target.is_player:
                 self._try_auto_potion()
 
+            # 通报倒下成员
             for m in self.team:
                 if m.hp <= 0 and not getattr(m, '_died_reported', False):
                     self.add_log('  {0} 倒下了!'.format(m.role_name))
@@ -1110,8 +1112,7 @@ class GameCore:
                 m.hp = m.get_max_hp_with_bonus() // 2
             self.add_log('  全体恢复: {0}/{1}'.format(
                 self.player.hp, self.player.get_max_hp_with_bonus()))
-            next_enemy, next_is_boss = get_random_enemy(self.current_map)
-            self.current_enemy = next_enemy
+            next_enemy, next
             self.current_enemy_is_boss = next_is_boss
             return False, 'Defeat'
 
