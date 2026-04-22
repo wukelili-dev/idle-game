@@ -1,12 +1,14 @@
-# Python
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
-
-# Game saves
-save.json
-
-# IDE
-.idea/
-.vscode/
-*.swp
+_*.py
+*.json
+!.gitignore
+!README.md
+!CHANGELOG.md
+!save.json
+.openclaw/
+*.md
+!README.md
+!CHANGELOG.md
+modules/__pycache__/

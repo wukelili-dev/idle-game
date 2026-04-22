@@ -19,7 +19,7 @@ from modules.equipment import WEAPONS, ARMORS
 from modules.buildings import get_all_building_names, get_wonder_names, BUILDING_CONFIGS
 from modules.maps import get_all_maps, get_random_enemy
 from modules.inventory import NOVELTY_ITEMS, NOVELTY_RARITY_COLORS, NOVELTY_RARITY_NAMES
-from modules.plants import get_plant_catalog, PLANT_RARITY_COLORS, PLANT_RARITY_NAMES
+from modules.plants import get_plant_catalog, get_plant_by_id, PLANT_RARITY_COLORS, PLANT_RARITY_NAMES
 from modules.tavern import generate_tavern_roster
 from modules.factory import DEPARTMENTS as FACTORY_DEPTS, FACTORY_BUILD_COST, calc_factory_bonus as calc_fb, FACTORY_BASE_PROFIT, FACTORY_BASE_INTERVAL_S
 
@@ -35,15 +35,15 @@ def Cs(name):
 def cost_str(cost):
     if not cost:
         return "Free"
-    m = {"\u91d1\u5e01": "\u91d1", "\u6728\u6750": "\u6728", "\u94c1\u77ff": "\u94c1",
-         "\u76ae\u9769": "\u76ae", "\u77f3\u5934": "\u77f3"}
+    m = {"金币": "金", "木材": "木", "铁矿": "铁",
+         "皮革": "皮", "石头": "石"}
     return " ".join(f"{m.get(k, k)}{v}" for k, v in cost.items())
 
 
 class HeroWorkshopApp:
     def __init__(self, page: ft.Page):
         self.page = page
-        self.page.title = "\u52c7\u8005\u5de5\u574a v5.1"
+        self.page.title = "勇者工坊 v5.1"
         self.page.window_width = 1280
         self.page.window_height = 900
         self.page.window_min_width = 960
@@ -77,8 +77,8 @@ class HeroWorkshopApp:
 
     # ─── Top Bar ────────────────────────────────────────────────
     def _build_top_bar(self):
-        ab = ft.AppBar(title=ft.Text("\u2694 \u52c7\u8005\u5de5\u574a v5.1", size=18, weight=ft.FontWeight.BOLD))
-        self._ref("kills_label", ft.Text("\u51fb\u6740: 0", size=13, color=Cs("GREY_500")))
+        ab = ft.AppBar(title=ft.Text("⚔ 勇者工坊 v5.1", size=18, weight=ft.FontWeight.BOLD))
+        self._ref("kills_label", ft.Text("击杀: 0", size=13, color=Cs("GREY_500")))
         self._ref("gold_label", ft.Text("\U0001fa99 100", size=15, weight=ft.FontWeight.BOLD, color="#B8860B"))
         ab.actions = [
             self._refs["kills_label"],
@@ -103,7 +103,7 @@ class HeroWorkshopApp:
         # Resources
         col.controls.append(ft.Container(
             content=ft.Column([
-                ft.Text("\U0001f4e6 \u8d44\u6e90", size=14, weight=ft.FontWeight.BOLD, color=Cs("GREY_700")),
+                ft.Text("\U0001f4e6 资源", size=14, weight=ft.FontWeight.BOLD, color=Cs("GREY_700")),
                 ft.Divider(height=1),
             ], spacing=4),
             padding=ft.Padding.all(8),
@@ -112,8 +112,8 @@ class HeroWorkshopApp:
             margin=ft.Margin.only(right=4, bottom=4),
         ))
 
-        MATERIALS = [("\u6728\u6750", "\U0001f332"), ("\u94c1\u77ff", "\u26cf\ufe0f"),
-                     ("\u76ae\u9769", "\U0001f9e4"), ("\u77f3\u5934", "\u26f0\ufe0f")]
+        MATERIALS = [("木材", "\U0001f332"), ("铁矿", "⛏️"),
+                     ("皮革", "\U0001f9e4"), ("石头", "⛰️")]
         for name, icon in MATERIALS:
             col.controls.append(ft.Row([
                 ft.Text(f"{icon} {name}:", size=13, expand=2),
@@ -125,7 +125,7 @@ class HeroWorkshopApp:
 
         # Buildings
         col.controls.append(ft.Container(
-            content=ft.Text("\U0001f3d7 \u5efa\u7b51", size=14, weight=ft.FontWeight.BOLD, color=Cs("GREY_700")),
+            content=ft.Text("\U0001f3d7 建筑", size=14, weight=ft.FontWeight.BOLD, color=Cs("GREY_700")),
             padding=ft.Padding.only(left=4, top=10, bottom=4),
         ))
         self.building_cards = ft.Column(spacing=4, scroll="auto")
@@ -135,7 +135,7 @@ class HeroWorkshopApp:
 
         # Wonders
         col.controls.append(ft.Container(
-            content=ft.Text("\u2728 \u5947\u89c2", size=14, weight=ft.FontWeight.BOLD, color=Cs("GREY_700")),
+            content=ft.Text("✨ 奇观", size=14, weight=ft.FontWeight.BOLD, color=Cs("GREY_700")),
             padding=ft.Padding.only(left=4, top=8, bottom=4),
         ))
         self.wonder_cards = ft.Column(spacing=3, scroll="auto")
@@ -153,11 +153,11 @@ class HeroWorkshopApp:
                         ft.Text(name, size=13, weight=ft.FontWeight.BOLD, expand=True),
                         self._ref(f"bld_count_{name}", ft.Text("x0", size=12, color=Cs("GREY_500"))),
                     ]),
-                    self._ref(f"bld_info_{name}", ft.Text("\u672a\u5efa\u9020", size=11, color=Cs("GREY_400"))),
+                    self._ref(f"bld_info_{name}", ft.Text("未建造", size=11, color=Cs("GREY_400"))),
                     ft.Row([
-                        ft.Button("\u5efa\u9020", scale=0.8, on_click=lambda e, n=name: self._build_building(n)),
+                        ft.Button("建造", scale=0.8, on_click=lambda e, n=name: self._build_building(n)),
                         self._ref(f"bld_upg_btn_{name}",
-                                  ft.OutlinedButton("\u5347\u7ea7", scale=0.8,
+                                  ft.OutlinedButton("升级", scale=0.8,
                                                     on_click=lambda e, n=name: self._upgrade_building(n))),
                     ], spacing=4),
                 ], spacing=3),
@@ -165,10 +165,10 @@ class HeroWorkshopApp:
             ),
             ft.Container(
                 content=ft.Row([
-                    ft.Text("\u5de5\u4eba:", size=11, expand=1),
+                    ft.Text("工人:", size=11, expand=1),
                     self._ref(f"worker_count_{name}", ft.Text("0/0", size=11, color=Cs("GREY_500"))),
                     ft.IconButton(icon=I.ADD, icon_size=14, on_click=lambda e, n=name: self._hire_worker(n)),
-                    ft.Text("\u2715", size=11),
+                    ft.Text("✕", size=11),
                     ft.IconButton(icon=I.REMOVE, icon_size=14, on_click=lambda e, n=name: self._fire_worker(n)),
                 ], spacing=2, tight=True),
                 padding=ft.Padding.only(left=6, right=6, bottom=4),
@@ -179,7 +179,7 @@ class HeroWorkshopApp:
 
     # ─── Center Panel ───────────────────────────────────────────
     def _build_wonder_card(self, name):
-        wonder_btn = ft.Button("\u5efa\u9020\u5947\u89c2", scale=0.9, on_click=lambda e, n=name: self._build_wonder(n))
+        wonder_btn = ft.Button("建造奇观", scale=0.9, on_click=lambda e, n=name: self._build_wonder(n))
         self.wonder_btns[name] = wonder_btn
         return ft.Container(
             content=ft.Column([
@@ -187,7 +187,7 @@ class HeroWorkshopApp:
                     ft.Text(name, size=13, weight=ft.FontWeight.BOLD, expand=True),
                     self._ref(f"wonder_count_{name}", ft.Text("x0", size=12, color=Cs("GREY_500"))),
                 ]),
-                self._ref(f"wonder_info_{name}", ft.Text("\u672a\u5efa\u9020", size=11, color=Cs("GREY_400"))),
+                self._ref(f"wonder_info_{name}", ft.Text("未建造", size=11, color=Cs("GREY_400"))),
                 ft.Container(
                     content=wonder_btn,
                     alignment=ft.alignment.Alignment(0.5, 0.5),
@@ -200,21 +200,22 @@ class HeroWorkshopApp:
         col = ft.Column(spacing=6, expand=True)
 
         # Team row
-        team_row = ft.Row(spacing=4)
+        team_row = ft.Row(spacing=6)
         self.team_btns = []
         for i in range(3):
             btn = ft.Button(
-                "\u2026" * 3, width=110,
+                ft.Text("…" * 3, size=14, weight=ft.FontWeight.W_500), width=120,
                 on_click=lambda e, idx=i: self._switch_member(idx)
             )
             self.team_btns.append(btn)
             team_row.controls.append(btn)
         team_row.controls.append(
-            ft.Button("\U0001f37a \u9152\u9986", on_click=self._open_tavern_tab, scale=0.9)
+            ft.Button(ft.Text("\U0001f37a 酒馆", size=14, weight=ft.FontWeight.W_500),
+                      on_click=self._open_tavern_tab)
         )
         col.controls.append(ft.Container(
             content=ft.Column([
-                ft.Text("\U0001f465 \u961f\u4f0d", size=14, weight=ft.FontWeight.BOLD),
+                ft.Text("\U0001f465 队伍", size=14, weight=ft.FontWeight.BOLD),
                 team_row,
             ], spacing=4),
             padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=6,
@@ -224,7 +225,7 @@ class HeroWorkshopApp:
         self.hero_stats = ft.Column(spacing=1)
         col.controls.append(ft.Container(
             content=ft.Column([
-                self._ref("hero_name_lbl", ft.Text("\U0001f9d9 \u52c7\u8005 Lv.1", size=14, weight=ft.FontWeight.BOLD)),
+                self._ref("hero_name_lbl", ft.Text("\U0001f9d9 勇者 Lv.1", size=14, weight=ft.FontWeight.BOLD)),
                 self.hero_stats,
             ], spacing=2),
             padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=6,
@@ -232,23 +233,24 @@ class HeroWorkshopApp:
         self._init_hero_stats()
 
         # Map + Enemy
-        map_btns_row = ft.Row(wrap=True, spacing=4)
+        map_btns_row = ft.Row(wrap=True, spacing=6)
         for mname in get_all_maps().keys():
-            btn = ft.Button(mname, scale=0.85, on_click=lambda e, m=mname: self._change_map(m),
-                                     style=ft.ButtonStyle(bgcolor=Cs("BLUE_600"), color=ft.Colors.WHITE))
+            btn = ft.Button(ft.Text(mname, size=14, weight=ft.FontWeight.W_500),
+                             on_click=lambda e, m=mname: self._change_map(m),
+                             style=ft.ButtonStyle(bgcolor=Cs("BLUE_600"), color=ft.Colors.WHITE))
             map_btns_row.controls.append(btn)
             self._ref(f"map_btn_{mname}", btn)
 
         col.controls.append(ft.Container(
             content=ft.Column([
-                ft.Text("\U0001f5fa \u5730\u56fe", size=14, weight=ft.FontWeight.BOLD),
-                self._ref("map_lbl", ft.Text("\u50b2\u6765\u56fd", size=13, color=Cs("BLUE_700"))),
+                ft.Text("\U0001f5fa 地图", size=14, weight=ft.FontWeight.BOLD),
+                self._ref("map_lbl", ft.Text("傲来国", size=13, color=Cs("BLUE_700"))),
                 map_btns_row,
                 ft.Divider(),
                 self._ref("enemy_display",
                           ft.Text("\U0001f480 ??? HP:?? ATK:??", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_800)),
                 ft.Row([
-                    ft.Button("\U0001f504 \u5237\u65b0\u654c\u4eba", on_click=self._refresh_enemy),
+                    ft.Button("\U0001f504 刷新敌人", on_click=self._refresh_enemy),
                     self._ref("refresh_cost_lbl", ft.Text("", size=12)),
                 ], spacing=4),
             ], spacing=4),
@@ -259,15 +261,15 @@ class HeroWorkshopApp:
         col.controls.append(ft.Container(
             content=ft.Column([
                 self._ref("battle_btn",
-                          ft.Button("\u2694 \u6218\u6597", width=200, height=45,
+                          ft.Button("⚔ 战斗", width=200, height=45,
                                             on_click=self._do_battle,
                                             style=ft.ButtonStyle(bgcolor=Cs("BLUE_600")))),
                 self._ref("auto_btn",
-                          ft.Button("\u26a1 \u81ea\u52a8\u6218\u6597", width=200,
+                          ft.Button("⚡ 自动战斗", width=200,
                                             on_click=self._toggle_auto,
                                             style=ft.ButtonStyle(bgcolor=Cs("ORANGE_600")))),
                 self._ref("auto_status_lbl",
-                          ft.Text("\u81ea\u52a8: \u5173", size=12, color=Cs("GREY_500"))),
+                          ft.Text("自动: 关", size=12, color=Cs("GREY_500"))),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
             padding=4,
         ))
@@ -282,14 +284,14 @@ class HeroWorkshopApp:
         # Potions
         col.controls.append(ft.Container(
             content=ft.Column([
-                ft.Text("\U0001f9ea \u836f\u6c34", size=14, weight=ft.FontWeight.BOLD),
+                ft.Text("\U0001f9ea 药水", size=14, weight=ft.FontWeight.BOLD),
                 ft.Row([
-                    ft.Button("\u8d2d\u4e70 (25G)", scale=0.85, on_click=self._buy_potion),
+                    ft.Button("购买 (25G)", scale=0.85, on_click=self._buy_potion),
                     self._ref("potions_lbl", ft.Text("x0", size=13)),
-                    ft.Button("\u4f7f\u7528 +20HP", scale=0.85, on_click=self._use_potion),
+                    ft.Button("使用 +20HP", scale=0.85, on_click=self._use_potion),
                 ], spacing=4),
                 ft.Row([
-                    ft.Text("\u81ea\u52a8 HP<", size=12),
+                    ft.Text("自动 HP<", size=12),
                     self._refs["auto_potion_dd"],
                     self._refs["auto_potion_lbl"],
                 ], spacing=4, alignment=ft.MainAxisAlignment.START),
@@ -301,7 +303,7 @@ class HeroWorkshopApp:
         self.log_view = ft.ListView(expand=True, spacing=2, auto_scroll=True)
         col.controls.append(ft.Container(
             content=ft.Column([
-                ft.Text("\U0001f4cb \u6218\u6597\u65e5\u5fd7", size=14, weight=ft.FontWeight.BOLD),
+                ft.Text("\U0001f4cb 战斗日志", size=14, weight=ft.FontWeight.BOLD),
                 ft.Container(content=self.log_view,
                              border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
                              border_radius=4, padding=4, expand=True),
@@ -319,28 +321,29 @@ class HeroWorkshopApp:
 
     def _init_hero_stats(self):
         for key, default in [
-            ("hp_lbl", "\u751f\u547d: 100/100"),
-            ("atk_lbl", "\u653b\u51fb: 10"),
-            ("def_lbl", "\u9632\u5fa1: 5"),
+            ("hp_lbl", "生命: 100/100"),
+            ("atk_lbl", "攻击: 10"),
+            ("def_lbl", "防御: 5"),
             ("crit_lbl", "CRIT: 0%"),
-            ("exp_lbl", "\u7ecf\u9a8c: 0/100"),
-            ("wpn_lbl", "\u6b66\u5668: None"),
-            ("arm_lbl", "\u62a4\u7532: None"),
+            ("exp_lbl", "经验: 0/100"),
+            ("wpn_lbl", "武器: None"),
+            ("arm_lbl", "护甲: None"),
         ]:
-            self._ref(key, ft.Text(default, size=12))
+            ctrl = self._ref(key, ft.Text(default, size=12))
+            self.hero_stats.controls.append(ctrl)
 
     # ─── Right Panel ─────────────────────────────────────────────
     def _build_right(self):
         self._tab_bar = ft.TabBar(
             tabs=[
-                ft.Tab(label="\u2694 \u6b66\u5668"),
-                ft.Tab(label="\U0001f6e1 \u62a4\u7532"),
-                ft.Tab(label="\U0001f381 \u6742\u8d27"),
-                ft.Tab(label="\U0001f392 \u80cc\u5305"),
-                ft.Tab(label="\u2b50 \u6750\u6599"),
-                ft.Tab(label="\U0001f37a \u9152\u9986"),
-                ft.Tab(label="\U0001f331 \u519c\u573a"),
-                ft.Tab(label="\U0001f3ed \u5de5\u5382"),
+                ft.Tab(label="⚔ 武器"),
+                ft.Tab(label="\U0001f6e1 护甲"),
+                ft.Tab(label="\U0001f381 杂货"),
+                ft.Tab(label="\U0001f392 背包"),
+                ft.Tab(label="⭐ 材料"),
+                ft.Tab(label="\U0001f37a 酒馆"),
+                ft.Tab(label="\U0001f331 农场"),
+                ft.Tab(label="\U0001f3ed 工厂"),
             ],
         )
         self._tab_contents = [
@@ -363,12 +366,12 @@ class HeroWorkshopApp:
 
     def _build_weapon_tab(self):
         items = []
-        for w in WEAPONS:
+        for idx, w in enumerate(WEAPONS):
             crit = f" CRIT{w['crit_rate']}%" if w["crit_rate"] > 0 else ""
-            ridx = min(w.get("rarity_idx", 0), 4)
+            ridx = min(idx // 4, 4)
             color = RARITY_COLORS[ridx]
             items.append(ft.ListTile(
-                title=ft.Text(f"{w['name']}  ATK:{w['attack']}{crit}", size=12, color=color),
+                title=ft.Text(f"{w['name']}  ATK:{w['attack']}{crit}", size=13, color=color, weight=ft.FontWeight.W_500),
                 subtitle=ft.Text(cost_str(w["cost"]), size=11, color=Cs("GREY_500")),
                 trailing=ft.IconButton(icon=I.SHOPPING_CART,
                                        on_click=lambda e, wpn=w: self._buy_weapon(wpn)),
@@ -377,12 +380,12 @@ class HeroWorkshopApp:
 
     def _build_armor_tab(self):
         items = []
-        for a in ARMORS:
+        for idx, a in enumerate(ARMORS):
             hp = f" HP+{a['hp_bonus']}" if a["hp_bonus"] > 0 else ""
-            ridx = min(a.get("rarity_idx", 0), 4)
+            ridx = min(idx // 4, 4)
             color = RARITY_COLORS[ridx]
             items.append(ft.ListTile(
-                title=ft.Text(f"{a['name']}  DEF:{a['defense']}{hp}", size=12, color=color),
+                title=ft.Text(f"{a['name']}  DEF:{a['defense']}{hp}", size=13, color=color, weight=ft.FontWeight.W_500),
                 subtitle=ft.Text(cost_str(a["cost"]), size=11, color=Cs("GREY_500")),
                 trailing=ft.IconButton(icon=I.SHOPPING_CART,
                                        on_click=lambda e, arm=a: self._buy_armor(arm)),
@@ -405,20 +408,20 @@ class HeroWorkshopApp:
 
     def _build_bag_tab(self):
         # 标题行
-        self._ref("bag_count_lbl", ft.Text("\u80cc\u5305: 0/20", size=13, weight=ft.FontWeight.BOLD))
+        self._ref("bag_count_lbl", ft.Text("背包: 0/20", size=13, weight=ft.FontWeight.BOLD))
         title_row = ft.Row([
             self._refs["bag_count_lbl"],
             ft.Container(expand=True),
-            ft.Text("\u70b9\u51fb\u88c5\u5907\u540d\u7b31\u6253\u62d4\u6216\u5356\u51fa", size=11, color=Cs("GREY_500")),
+            ft.Text("点击装备名笱打拔或卖出", size=11, color=Cs("GREY_500")),
         ], spacing=8)
 
         # 当前装备区
         equip_ctr = ft.Column([
-            ft.Text("\u2014\u2014 \u5f53\u524d\u88c5\u5907 \u2014\u2014", size=13, weight=ft.FontWeight.BOLD),
+            ft.Text("—— 当前装备 ——", size=13, weight=ft.FontWeight.BOLD),
             ft.Row([
-                self._ref("eq_weapon_lbl", ft.Text("\u6b66\u5668: \u672a\u88c5\u5907", size=12)),
+                self._ref("eq_weapon_lbl", ft.Text("武器: 未装备", size=12)),
                 ft.Container(expand=True),
-                self._ref("eq_armor_lbl", ft.Text("\u62a4\u7532: \u672a\u88c5\u5907", size=12)),
+                self._ref("eq_armor_lbl", ft.Text("护甲: 未装备", size=12)),
             ], spacing=12),
         ], spacing=4)
 
@@ -433,10 +436,10 @@ class HeroWorkshopApp:
             ridx = i  # will be updated by _refresh_bag
             cell = ft.Container(
                 content=ft.Column([
-                    self._ref(f"bag_lbl_{i}", ft.Text("\u7a7a", size=11, color=Cs("GREY_500"), text_align="center")),
+                    self._ref(f"bag_lbl_{i}", ft.Text("空", size=11, color=Cs("GREY_500"), text_align="center")),
                     ft.Row([
-                        self._ref(f"bag_e_{i}", ft.Text("\u88c5", size=10)),
-                        self._ref(f"bag_s_{i}", ft.Text("\u5356", size=10)),
+                        self._ref(f"bag_e_{i}", ft.Text("装", size=10)),
+                        self._ref(f"bag_s_{i}", ft.Text("卖", size=10)),
                     ], spacing=2, alignment=ft.MainAxisAlignment.CENTER),
                 ], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
                 border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
@@ -460,14 +463,14 @@ class HeroWorkshopApp:
     def _refresh_bag(self):
         inv = self.game.get_current_member().get_inventory()
         count = inv.count()
-        self._refs["bag_count_lbl"].value = f"\u80cc\u5305: {count}/20"
+        self._refs["bag_count_lbl"].value = f"背包: {count}/20"
 
         # 当前装备
         m = self.game.get_current_member()
         wpn = m.weapon
         arm = m.armor
-        self._refs["eq_weapon_lbl"].value = (f"\u6b66\u5668: {wpn['name']}" if wpn else "\u6b66\u5668: \u672a\u88c5\u5907")
-        self._refs["eq_armor_lbl"].value = (f"\u62a4\u7532: {arm['name']}" if arm else "\u62a4\u7532: \u672a\u88c5\u5907")
+        self._refs["eq_weapon_lbl"].value = (f"武器: {wpn['name']}" if wpn else "武器: 未装备")
+        self._refs["eq_armor_lbl"].value = (f"护甲: {arm['name']}" if arm else "护甲: 未装备")
 
         # 刷新格子
         for i in range(20):
@@ -490,33 +493,33 @@ class HeroWorkshopApp:
                     lbl.value = item.get("name", "?")[:6]
                     lbl.color = Cs("GREY_300")
             else:
-                lbl.value = "\u7a7a"
+                lbl.value = "空"
                 lbl.color = Cs("GREY_500")
 
     def _bag_cell_click(self, idx):
         inv = self.game.get_current_member().get_inventory()
         item = inv.get(idx)
         if not item:
-            self._show_toast("\u8be5\u6865\u4f4d\u4e3a\u7a7a")
+            self._show_toast("该桥位为空")
             return
         item_type = item.get("type", "item")
         if item_type == "weapon":
             result = self.game.player.equip_item(idx)
             if result[0]:
-                self.game.add_log(f"\u88c5\u5907\u6b66\u5668: {result[1]}")
+                self.game.add_log(f"装备武器: {result[1]}")
             else:
-                self.game.add_log(f"\u88c5\u5907\u5931\u8d25: {result[1]}")
+                self.game.add_log(f"装备失败: {result[1]}")
         elif item_type == "armor":
             result = self.game.player.equip_item(idx)
             if result[0]:
-                self.game.add_log(f"\u88c5\u5907\u62a4\u7532: {result[1]}")
+                self.game.add_log(f"装备护甲: {result[1]}")
             else:
-                self.game.add_log(f"\u88c5\u5907\u5931\u8d25: {result[1]}")
+                self.game.add_log(f"装备失败: {result[1]}")
         elif item_type == "novelty":
             # Show use/sell dialog
             self._use_novelty_in_bag(idx)
         else:
-            self._show_toast("\u6682\u4e0d\u80fd\u64cd\u4f5c\u8be5\u7269\u54c1")
+            self._show_toast("暂不能操作该物品")
         self._refresh_bag()
         self._refresh_all_ui()
 
@@ -547,11 +550,11 @@ class HeroWorkshopApp:
                         self._ref(f"mat_{mat}_cnt", ft.Text("x0", size=12, color=Cs("GREY_400"))),
                     ], spacing=8),
                     ft.Row([
-                        ft.Text(f"\u5356: {mat_sell_prices[mat]}G / \u4e70: {mat_buy_prices[mat]}G", size=11, color=Cs("GREY_500")),
+                        ft.Text(f"卖: {mat_sell_prices[mat]}G / 买: {mat_buy_prices[mat]}G", size=11, color=Cs("GREY_500")),
                     ], spacing=12),
                     ft.Row([
-                        self._ref(f"mat_{mat}_buy_10", ft.Button(f"\u4e7010({mat_buy_prices[mat]*10}G)", scale=0.75, on_click=lambda e, m=mat: self._buy_mat(m, 10))),
-                        self._ref(f"mat_{mat}_sell_10", ft.Button(f"\u535610({mat_sell_prices[mat]*10}G)", scale=0.75, on_click=lambda e, m=mat: self._sell_mat(m, 10))),
+                        self._ref(f"mat_{mat}_buy_10", ft.Button(f"买10({mat_buy_prices[mat]*10}G)", scale=0.75, on_click=lambda e, m=mat: self._buy_mat(m, 10))),
+                        self._ref(f"mat_{mat}_sell_10", ft.Button(f"卖10({mat_sell_prices[mat]*10}G)", scale=0.75, on_click=lambda e, m=mat: self._sell_mat(m, 10))),
                     ], spacing=6),
                 ], spacing=4),
                 border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
@@ -584,7 +587,7 @@ class HeroWorkshopApp:
     def _build_tavern_tab(self):
         self._ref("tavern_gold_lbl",
                   ft.Text("\U0001fa99 100G", size=13, weight=ft.FontWeight.BOLD))
-        self._ref("tavern_timer_lbl", ft.Text("\u5237\u65b0: --:--", size=12))
+        self._ref("tavern_timer_lbl", ft.Text("刷新: --:--", size=12))
         self._ref("tavern_roster_ctr", ft.Column([], spacing=4, scroll="auto"))
         self._ref("team_manage_ctr", ft.Column([], spacing=4, scroll="auto"))
         ctr = ft.Column([
@@ -593,29 +596,29 @@ class HeroWorkshopApp:
                     self._refs["tavern_gold_lbl"],
                     self._refs["tavern_timer_lbl"],
                     ft.Container(expand=True),
-                    ft.Button("\U0001f504 \u5237\u65b0 (50G)", scale=0.85,
+                    ft.Button("\U0001f504 刷新 (50G)", scale=0.85,
                                        on_click=self._tavern_refresh),
                 ], spacing=8),
                 padding=6, bgcolor=Cs("BROWN_900"),
             ),
-            ft.Text("\u2014\u2014 \u53ef\u62db\u52df\u89d2\u8272 \u2014\u2014",
+            ft.Text("—— 可招募角色 ——",
                     size=13, weight=ft.FontWeight.BOLD),
             self._refs["tavern_roster_ctr"],
             ft.Divider(),
-            ft.Text("\u2014\u2014 \u961f\u4f0d\u7ba1\u7406 \u2014\u2014",
+            ft.Text("—— 队伍管理 ——",
                     size=13, weight=ft.FontWeight.BOLD),
             self._refs["team_manage_ctr"],
         ], scroll="auto", spacing=4)
         return ft.Container(content=ctr, padding=6)
 
     def _build_farm_tab(self):
-        self._ref("farm_count_lbl", ft.Text("\U0001f331 \u6211\u7684\u519c\u573a: 0/10", size=13))
+        self._ref("farm_count_lbl", ft.Text("\U0001f331 我的农场: 0/10", size=13))
         self._ref("farm_plants_ctr", ft.Column([], spacing=4, scroll="auto"))
         self._ref("farm_seeds_ctr", ft.Column([], spacing=4, scroll="auto"))
         for pd in get_plant_catalog():
             rc = PLANT_RARITY_COLORS.get(pd["rarity"], "#888888")
             text = (f"{pd['icon']} {pd['name']}  "
-                    f"\u4ea7{int(pd['harvest_gold'])}G/{int(pd['harvest_interval_s'])}s  "
+                    f"产{int(pd['harvest_gold'])}G/{int(pd['harvest_interval_s'])}s  "
                     f"{PLANT_RARITY_NAMES.get(pd['rarity'],'')} [{pd['seed_price']}G]")
             self._refs["farm_seeds_ctr"].controls.append(
                 ft.ListTile(
@@ -629,7 +632,7 @@ class HeroWorkshopApp:
             ft.Container(content=self._refs["farm_plants_ctr"],
                          border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
                          border_radius=4, padding=4, height=180),
-            ft.Text("\u2014\u2014 \u79cd\u5b50\u5546\u5e97 \u2014\u2014",
+            ft.Text("—— 种子商店 ——",
                     size=13, weight=ft.FontWeight.BOLD),
             ft.Container(content=self._refs["farm_seeds_ctr"],
                          border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
@@ -639,14 +642,14 @@ class HeroWorkshopApp:
 
     def _build_factory_tab(self):
         self._ref("factory_status_lbl",
-                  ft.Text("\U0001f3ed \u672a\u5efa\u9020", size=13, color=ft.Colors.RED))
+                  ft.Text("\U0001f3ed 未建造", size=13, color=ft.Colors.RED))
         self._ref("factory_info_lbl",
-                  ft.Text("\u5efa\u9020\u8d39\u7528: " + ", ".join(f"{k}{v}" for k, v in FACTORY_BUILD_COST.items()) + "  |  \u57fa\u7840\u5229\u6da6: 50G/5min", size=11))
+                  ft.Text("建造费用: " + ", ".join(f"{k}{v}" for k, v in FACTORY_BUILD_COST.items()) + "  |  基础利润: 50G/5min", size=11))
         self._ref("factory_build_btn",
-                  ft.Button("\U0001f3d7 \u5efa\u9020\u5de5\u5382", on_click=self._build_factory_tab_action))
+                  ft.Button("\U0001f3d7 建造工厂", on_click=self._build_factory_tab_action))
         self._ref("factory_depts_ctr", ft.Column([], spacing=4))
         self._ref("factory_workers_lbl",
-                  ft.Text("\u52b3\u5de5: 0/5  (\u6bcf\u4eba+15%, 80G/\u4eba)", size=12))
+                  ft.Text("劳工: 0/5  (每人+15%, 80G/人)", size=12))
 
         for dept in FACTORY_DEPTS:
             if dept["id"] == "basic":
@@ -659,11 +662,11 @@ class HeroWorkshopApp:
                           content=ft.Column([
                               ft.Row([
                                   ft.Text(f"{dept['name']}", size=12, weight=ft.FontWeight.BOLD, expand=True),
-                                  self._ref(f"dept_status_{dept['id']}", ft.Text("\u672a\u89e3\u9501", size=11, color=ft.Colors.RED)),
+                                  self._ref(f"dept_status_{dept['id']}", ft.Text("未解锁", size=11, color=ft.Colors.RED)),
                               ], tight=True),
-                              ft.Text(f"{dept['desc']}  |  \u8d39\u7528: {cost_str}", size=10, color=Cs("GREY_600")),
+                              ft.Text(f"{dept['desc']}  |  费用: {cost_str}", size=10, color=Cs("GREY_600")),
                               self._ref(f"dept_btn_{dept['id']}",
-                                        ft.Button(f"\u89e3\u9501 {dept['name']}", scale=0.8,
+                                        ft.Button(f"解锁 {dept['name']}", scale=0.8,
                                                   on_click=lambda e, d=dept["id"]: self._buy_dept(d))),
                           ], spacing=2),
                           padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
@@ -675,15 +678,15 @@ class HeroWorkshopApp:
             self._refs["factory_info_lbl"],
             self._refs["factory_build_btn"],
             ft.Divider(),
-            ft.Text("\u2014\u2014 \u90e8\u95e8 \u2014\u2014", size=13, weight=ft.FontWeight.BOLD),
+            ft.Text("—— 部门 ——", size=13, weight=ft.FontWeight.BOLD),
             ft.Container(content=self._refs["factory_depts_ctr"],
                          border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
                          border_radius=4, padding=4),
             ft.Divider(),
             self._refs["factory_workers_lbl"],
             ft.Row([
-                ft.Button("+ \u96c7\u4f63", scale=0.85, on_click=self._hire_factory_worker),
-                ft.Button("- \u89e3\u96c7", scale=0.85, on_click=self._fire_factory_worker),
+                ft.Button("+ 雇佣", scale=0.85, on_click=self._hire_factory_worker),
+                ft.Button("- 解雇", scale=0.85, on_click=self._fire_factory_worker),
             ], spacing=8),
         ], scroll="auto", spacing=4)
         return ft.Container(content=ctr, padding=6)
@@ -693,9 +696,9 @@ class HeroWorkshopApp:
         self.page.add(ft.Container(
             content=ft.Row([
                 ft.Container(expand=True),
-                ft.Button("\U0001f4be \u5b58\u6863", on_click=self._save),
-                ft.Button("\U0001f4c2 \u8bfb\u6863", on_click=self._load),
-                ft.Button("\u2753 \u5e2e\u52a9", on_click=self._show_help),
+                ft.Button("\U0001f4be 存档", on_click=self._save),
+                ft.Button("\U0001f4c2 读档", on_click=self._load),
+                ft.Button("❓ 帮助", on_click=self._show_help),
                 ft.Container(expand=True),
             ], spacing=8),
             padding=4, border=ft.Border.only(top=ft.BorderSide(color=Cs("OUTLINE_VARIANT"))),
@@ -730,7 +733,7 @@ class HeroWorkshopApp:
         p = g.get_current_member()
 
         self._refs["gold_label"].value = f"\U0001fa99 {g.player.gold}"
-        self._refs["kills_label"].value = f"\u51fb\u6740: {g.player.kill_count}"
+        self._refs["kills_label"].value = f"击杀: {g.player.kill_count}"
 
         for res, val in g.resources.items():
             ref = self._refs.get(f"res_{res}")
@@ -741,36 +744,36 @@ class HeroWorkshopApp:
         for i, btn in enumerate(self.team_btns):
             if i < len(team):
                 m = team[i]
-                btn.content = ft.Text(f"{m.role_name}\nLv.{m.level}", size=11)
+                btn.content = ft.Text(f"{m.role_name}\nLv.{m.level}", size=14, weight=ft.FontWeight.W_500)
                 bg = Cs("ORANGE_600") if i == g.current_member_idx else (Cs("GREEN_600") if i == 0 else Cs("DEEP_PURPLE_600"))
                 btn.style = ft.ButtonStyle(bgcolor=bg)
             else:
-                btn.content = ft.Text("\u7a7a\u4f4d", size=11)
+                btn.content = ft.Text("空位", size=14, weight=ft.FontWeight.W_500)
                 btn.style = ft.ButtonStyle(bgcolor=Cs("GREY_600"))
 
         max_hp = p.get_max_hp_with_bonus()
         self._refs["hero_name_lbl"].value = f"\U0001f9d9 {p.role_name} Lv.{p.level}"
-        self._refs["hp_lbl"].value = f"\u751f\u547d: {p.hp}/{max_hp}"
-        self._refs["atk_lbl"].value = f"\u653b\u51fb: {p.get_total_attack()}"
-        self._refs["def_lbl"].value = f"\u9632\u5fa1: {p.get_total_defense()}"
+        self._refs["hp_lbl"].value = f"生命: {p.hp}/{max_hp}"
+        self._refs["atk_lbl"].value = f"攻击: {p.get_total_attack()}"
+        self._refs["def_lbl"].value = f"防御: {p.get_total_defense()}"
         self._refs["crit_lbl"].value = f"CRIT: {p.get_crit_rate()}%"
-        self._refs["exp_lbl"].value = f"\u7ecf\u9a8c: {p.exp}/{p.level * 100}"
+        self._refs["exp_lbl"].value = f"经验: {p.exp}/{p.level * 100}"
         wn = p.weapon["name"] if p.weapon and isinstance(p.weapon, dict) else "None"
         an = p.armor["name"] if p.armor and isinstance(p.armor, dict) else "None"
-        self._refs["wpn_lbl"].value = f"\u6b66\u5668: {wn}"
-        self._refs["arm_lbl"].value = f"\u62a4\u7532: {an}"
+        self._refs["wpn_lbl"].value = f"武器: {wn}"
+        self._refs["arm_lbl"].value = f"护甲: {an}"
 
         self._refs["map_lbl"].value = g.current_map
         for mname in get_all_maps().keys():
             btn = self._refs.get(f"map_btn_{mname}")
             if btn:
                 if mname in g.unlocked_maps:
-                    btn.content = ft.Text(mname, size=11)
-                    btn.style = ft.ButtonStyle(bgcolor=Cs("GREEN_600"))
+                    btn.content = ft.Text(mname, size=14, weight=ft.FontWeight.W_500)
+                    btn.style = ft.ButtonStyle(bgcolor=Cs("GREEN_600"), color=ft.Colors.WHITE)
                 else:
                     cost = get_all_maps()[mname].get("unlock_cost", 0)
-                    btn.content = ft.Text(f"{mname}({cost}G)", size=11)
-                    btn.style = ft.ButtonStyle(bgcolor=Cs("GREY_600"))
+                    btn.content = ft.Text(f"{mname}({cost}G)", size=14, weight=ft.FontWeight.W_500)
+                    btn.style = ft.ButtonStyle(bgcolor=Cs("GREY_600"), color=ft.Colors.WHITE)
 
         e = g.current_enemy
         if e:
@@ -783,14 +786,14 @@ class HeroWorkshopApp:
 
         self._refs["battle_btn"].disabled = g.is_battling
         self._refs["battle_btn"].content = ft.Text(
-            "\u6218\u4e2d..." if g.is_battling else "\u2694 \u6218\u6597", size=13)
-        self._refs["auto_status_lbl"].value = "\u81ea\u52a8: \u5f00" if g.auto_battle else "\u81ea\u52a8: \u5173"
+            "战中..." if g.is_battling else "⚔ 战斗", size=13)
+        self._refs["auto_status_lbl"].value = "自动: 开" if g.auto_battle else "自动: 关"
         self._refs["auto_status_lbl"].color = ft.Colors.GREEN_600 if g.auto_battle else Cs("GREY_500")
         self._refs["auto_btn"].content = ft.Text(
-            "\u23f9 \u505c\u6b62" if g.auto_battle else "\u26a1 \u81ea\u52a8\u6218\u6597", size=12)
+            "⏹ 停止" if g.auto_battle else "⚡ 自动战斗", size=12)
         self._refs["auto_btn"].style = ft.ButtonStyle(
             bgcolor=Cs("RED_600") if g.auto_battle else Cs("ORANGE_600"))
-        self._refs["potions_lbl"].value = f"\U0001f9ea \u836f\u6c34: x{p.potions}"
+        self._refs["potions_lbl"].value = f"\U0001f9ea 药水: x{p.potions}"
 
         for bname in get_all_building_names():
             levels = g.building_levels.get(bname, [])
@@ -805,57 +808,56 @@ class HeroWorkshopApp:
                     cfg = BUILDING_CONFIGS[bname]
                     info_ref.value = f"Lv{avg} {cfg.get_output(avg)}/{cfg.get_interval(avg)}s"
                 else:
-                    info_ref.value = "\u672a\u5efa\u9020"
+                    info_ref.value = "未建造"
             if upg_btn:
                 upg_btn.disabled = not levels
 
         for wname, btn in self.wonder_btns.items():
             if wname in g.wonders:
-                btn.content = ft.Text(f"\u2705 {wname}", size=12)
+                btn.content = ft.Text(f"✅ {wname}", size=12)
                 btn.disabled = True
 
         # 更新农场状态
         flbl = self._refs.get("farm_count_lbl")
         if flbl:
-            flbl.value = f"\U0001f331 \u6211\u7684\u519c\u573a: {len(g.plants)}/10"
+            flbl.value = f"\U0001f331 我的农场: {len(g.plants)}/10"
         
         # 更新植物列表
         fctr = self._refs.get("farm_plants_ctr")
         if fctr:
             fctr.controls.clear()
             for plant in g.plants:
-                pd = next((p for p in get_plant_catalog() if p["id"] == plant["id"]), None)
+                pd = get_plant_by_id(plant["plant_id"])
                 if pd:
-                    harvest_time = plant["harvest_time"]
-                    remaining = max(0, harvest_time - time.time())
-                    if remaining <= 0:
-                        status = "\U0001f7e2 \u53ef\u6536\u83b7"
-                        color = Cs("GREEN_600")
-                        btn = ft.Button("\u6536\u83b7", scale=0.8, 
-                                      on_click=lambda e, p=plant: self._harvest_plant(p))
-                    else:
-                        m, s = divmod(int(remaining), 60)
-                        status = f"\U0001f7e0 {m:02d}:{s:02d}"
-                        color = Cs("ORANGE_600")
-                        btn = ft.Row([
-                            ft.Text("\u79cd\u690d\u4e2d", size=11, color=Cs("GREY_500")),
-                            ft.Button("\u26a1", scale=0.7,
-                                      on_click=lambda e, p=plant: self._speedup(p)),
-                        ], spacing=4)
-                    
-                    fctr.controls.append(
-                        ft.Container(
-                            content=ft.Column([
-                                ft.Row([
-                                    ft.Text(f"{pd['icon']} {pd['name']}", size=12, weight=ft.FontWeight.BOLD, expand=True),
-                                    ft.Text(status, size=11, color=color)
-                                ], tight=True),
-                                ft.Container(content=btn, alignment=ft.alignment.Alignment(0.5, 0.5))
-                            ], spacing=2),
-                            padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4,
-                            bgcolor="#fafafa"
+                    status_info = self.game.get_plant_status(plant["id"])
+                    if status_info:
+                        if status_info["adult"]:
+                            status = "\U0001f7e2 可收获"
+                            color = Cs("GREEN_600")
+                            btn = ft.Button("收获", scale=0.8, 
+                                          on_click=lambda e, p=plant: self._harvest_plant(p))
+                        else:
+                            status = f"{status_info['progress']}"
+                            color = Cs("ORANGE_600")
+                            btn = ft.Row([
+                                ft.Text("种植中", size=11, color=Cs("GREY_500")),
+                                ft.Button("⚡", scale=0.7,
+                                          on_click=lambda e, p=plant: self._speedup(p)),
+                            ], spacing=4)
+                        
+                        fctr.controls.append(
+                            ft.Container(
+                                content=ft.Column([
+                                    ft.Row([
+                                        ft.Text(f"{pd['icon']} {pd['name']}", size=12, weight=ft.FontWeight.BOLD, expand=True),
+                                        ft.Text(status, size=11, color=color)
+                                    ], tight=True),
+                                    ft.Container(content=btn, alignment=ft.alignment.Alignment(0.5, 0.5))
+                                ], spacing=2),
+                                padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4,
+                                bgcolor="#fafafa"
+                            )
                         )
-                    )
         
         # 更新工厂状态
         fsl = self._refs.get("factory_status_lbl")
@@ -863,17 +865,17 @@ class HeroWorkshopApp:
             if self.game.factory:
                 bonus = calc_fb(self.game.factory_departments, self.game.factory_workers)
                 profit = int(FACTORY_BASE_PROFIT * bonus)
-                fsl.value = f"\U0001f3ed \u8fd0\u8425\u4e2d | \u501f\u7387: x{bonus:.1f} | {profit}G/{int(FACTORY_BASE_INTERVAL_S)}s"
+                fsl.value = f"\U0001f3ed 运营中 | 借率: x{bonus:.1f} | {profit}G/{int(FACTORY_BASE_INTERVAL_S)}s"
                 fsl.color = ft.Colors.GREEN_700
             else:
-                fsl.value = "\U0001f3ed \u672a\u5efa\u9020"
+                fsl.value = "\U0001f3ed 未建造"
                 fsl.color = ft.Colors.RED
         fbb = self._refs.get("factory_build_btn")
         if fbb:
             fbb.disabled = self.game.factory is not None
         fwl = self._refs.get("factory_workers_lbl")
         if fwl:
-            fwl.value = f"\u52b3\u5de5: {self.game.factory_workers}/5  (\u6bcf\u4eba+15%, 80G/\u4eba)"
+            fwl.value = f"劳工: {self.game.factory_workers}/5  (每人+15%, 80G/人)"
         for dept in FACTORY_DEPTS:
             if dept["id"] == "basic":
                 continue
@@ -881,10 +883,10 @@ class HeroWorkshopApp:
             bt = self._refs.get(f"dept_btn_{dept['id']}")
             if st:
                 if dept["id"] in self.game.factory_departments:
-                    st.value = "\u2705 \u5df2\u89e3\u9501"
+                    st.value = "✅ 已解锁"
                     st.color = ft.Colors.GREEN_700
                 else:
-                    st.value = "\u672a\u89e3\u9501"
+                    st.value = "未解锁"
                     st.color = ft.Colors.RED
             if bt:
                 bt.disabled = dept["id"] in self.game.factory_departments or self.game.factory is None
@@ -896,7 +898,7 @@ class HeroWorkshopApp:
         if tl:
             left = max(0, 3600 - (time.time() - g.tavern_last_refresh))
             m, s = divmod(int(left), 60)
-            tl.value = f"\u5237\u65b0: {m:02d}:{s:02d}"
+            tl.value = f"刷新: {m:02d}:{s:02d}"
         # 酒馆角色列表
         rctr = self._refs.get("tavern_roster_ctr")
         if rctr:
@@ -911,26 +913,26 @@ class HeroWorkshopApp:
                             ft.Text(f"{ch.get('role_name','?')} Lv.{ch.get('level',1)}", size=12, weight=ft.FontWeight.BOLD, expand=True),
                             ft.Text(f"{cost}G", size=12, color=ft.Colors.AMBER_700),
                         ], tight=True),
-                        ft.Text(f"\u6b66\u5668: {wn}", size=10, color=Cs("GREY_600")),
-                        ft.Button("\u62db\u52df", scale=0.8, on_click=lambda e, c=ch: self._recruit_member(c)),
+                        ft.Text(f"武器: {wn}", size=10, color=Cs("GREY_600")),
+                        ft.Button("招募", scale=0.8, on_click=lambda e, c=ch: self._recruit_member(c)),
                     ], spacing=2), padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4))
             if not roster:
-                rctr.controls.append(ft.Text("\u6682\u65e0\u53ef\u62db\u52df\u89d2\u8272", size=12, color=Cs("GREY_500")))
+                rctr.controls.append(ft.Text("暂无可招募角色", size=12, color=Cs("GREY_500")))
         # 队伍管理列表
         tctr = self._refs.get("team_manage_ctr")
         if tctr:
             tctr.controls.clear()
             team = g.get_team()
             for i, m in enumerate(team):
-                tag = " \u2605\u961f\u957f" if i == 0 else f" #{i}"
+                tag = " ★队长" if i == 0 else f" #{i}"
                 wn = m.weapon["name"] if m.weapon and isinstance(m.weapon, dict) else "无"
                 tctr.controls.append(ft.Container(
                     content=ft.Row([
                         ft.Text(f"{m.role_name} Lv.{m.level}{tag}", size=12, weight=ft.FontWeight.BOLD, expand=True),
                         ft.Text(f"HP:{m.hp}/{m.get_max_hp_with_bonus()}", size=11),
-                        ft.Button("\u5207\u6362", scale=0.75,
+                        ft.Button("切换", scale=0.75,
                                   on_click=lambda e, idx=i: self._switch_to(idx)) if i != g.current_member_idx else None,
-                        ft.Button("\u8e22\u51fa", scale=0.75,
+                        ft.Button("踢出", scale=0.75,
                                   on_click=lambda e, idx=i: self._kick_member_ui(idx)) if i > 0 else None,
                     ], spacing=4, alignment=ft.alignment.Alignment(-1, 0)),
                     padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4,
@@ -943,18 +945,17 @@ class HeroWorkshopApp:
     # ─── Actions ────────────────────────────────────────────────
     def _do_battle(self, e=None):
         if self.game.is_battling:
-            self.game.add_log("\u6218\u4e2d\u4e2d...")
+            self.game.add_log("战中中...")
             return
         enemy, is_boss = get_random_enemy(self.game.current_map)
         if not enemy:
-            self.game.add_log("\u6ca1\u6709\u654c\u4eba!")
+            self.game.add_log("没有敌人!")
             return
         self.game.current_enemy = enemy
         self.game.current_enemy_is_boss = is_boss
         threading.Thread(target=self._battle_thread, args=(enemy, is_boss), daemon=True).start()
 
     def _battle_thread(self, enemy, is_boss):
-        self.game.is_battling = True
         self._refresh_all_ui()
         try:
             result, msg = self.game.battle_team(enemy, is_boss=is_boss)
@@ -973,18 +974,18 @@ class HeroWorkshopApp:
     def _toggle_auto(self, e=None):
         self.game.auto_battle = not self.game.auto_battle
         if self.game.auto_battle:
-            self.game.add_log("\u26a1 \u81ea\u52a8\u6218\u6597 ON!")
+            self.game.add_log("⚡ 自动战斗 ON!")
             self.game.start_auto_battle()
         else:
-            self.game.add_log("\u23f9 \u81ea\u52a8\u6218\u6597 OFF.")
+            self.game.add_log("⏹ 自动战斗 OFF.")
 
     def _refresh_enemy(self, e=None):
         if self.game.is_battling:
-            self.game.add_log("\u6218\u4e2d\u65e0\u6cd5\u5237\u65b0!")
+            self.game.add_log("战中无法刷新!")
             return
         cost = 5 + random.randint(0, 5)
         if self.game.player.gold < cost:
-            self.game.add_log("\u91d1\u5e01\u4e0d\u8db3! \u9700\u8981 " + str(cost) + "G")
+            self.game.add_log("金币不足! 需要 " + str(cost) + "G")
             return
         self.game.player.gold -= cost
         enemy, is_boss = get_random_enemy(self.game.current_map)
@@ -1011,7 +1012,7 @@ class HeroWorkshopApp:
         if not ok:
             self._show_toast(msg)
         else:
-            self.game.add_log(f"\u5207\u6362\u5230: {self.game.get_current_member().role_name}")
+            self.game.add_log(f"切换到: {self.game.get_current_member().role_name}")
 
     def _buy_potion(self, e=None):
         ok, msg = self.game.buy_potion()
@@ -1057,10 +1058,10 @@ class HeroWorkshopApp:
     def _upgrade_building(self, name):
         levels = self.game.building_levels.get(name, [])
         if not levels:
-            self.game.add_log("\u5148\u5efa\u9020!")
+            self.game.add_log("先建造!")
             return
         ok, msg = self.game.upgrade_building(name, len(levels) - 1)
-        self.game.add_log(f"{name} \u5347\u7ea7\u6210\u529f!" if ok else f"\u5347\u7ea7: {msg}")
+        self.game.add_log(f"{name} 升级成功!" if ok else f"升级: {msg}")
 
     def _build_wonder(self, name):
         ok, msg = self.game.build_wonder(name)
@@ -1068,11 +1069,11 @@ class HeroWorkshopApp:
 
     def _buy_weapon(self, wpn):
         ok, msg = self.game.buy_weapon(wpn)
-        self.game.add_log(f"\u8d2d\u4e70\u6b66\u5668: {msg}" if ok else f"\u8d2d\u4e70\u5931\u8d25: {msg}")
+        self.game.add_log(f"购买武器: {msg}" if ok else f"购买失败: {msg}")
 
     def _buy_armor(self, arm):
         ok, msg = self.game.buy_armor(arm)
-        self.game.add_log(f"\u8d2d\u4e70\u62a4\u7532: {msg}" if ok else f"\u8d2d\u4e70\u5931\u8d25: {msg}")
+        self.game.add_log(f"购买护甲: {msg}" if ok else f"购买失败: {msg}")
 
     def _buy_novelty(self, item):
         ok, msg = self.game.buy_novelty_item(item)
@@ -1113,7 +1114,7 @@ class HeroWorkshopApp:
         self.game.add_log(msg)
 
     def _buy_dept(self, dept_id):
-        ok, msg = self.game.buy_factory_dept(dept_id)
+        ok, msg = self.game.buy_department(dept_id)
         self.game.add_log(msg)
 
     def _hire_factory_worker(self, e=None):
@@ -1156,12 +1157,12 @@ class HeroWorkshopApp:
         }
         with open(SAVE_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        self.game.add_log(f"\U0001f4be \u5df2\u5b58\u6863!")
-        self._show_toast("\u5b58\u6863\u6210\u529f!")
+        self.game.add_log(f"\U0001f4be 已存档!")
+        self._show_toast("存档成功!")
 
     def _load(self, e=None):
         if not os.path.exists(SAVE_PATH):
-            self.game.add_log("\u6ca1\u6709\u5b58\u6863\u6587\u4ef6!")
+            self.game.add_log("没有存档文件!")
             return
         with open(SAVE_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -1170,8 +1171,8 @@ class HeroWorkshopApp:
         self.game.building_levels = data.get("building_levels", {})
         self.game.building_workers = data.get("building_workers", {})
         self.game.player.from_dict(data.get("player", {}))
-        self.game.current_map = data.get("current_map", "\u50b2\u6765\u56fd")
-        self.game.unlocked_maps = set(data.get("unlocked_maps", ["\u50b2\u6765\u56fd"]))
+        self.game.current_map = data.get("current_map", "傲来国")
+        self.game.unlocked_maps = set(data.get("unlocked_maps", ["傲来国"]))
         self.game.current_enemy_idx = data.get("current_enemy_idx", 0)
         self.game.wonders = {n: True for n in data.get("wonders", [])}
         self.game.plants = data.get("plants", [])
@@ -1187,18 +1188,18 @@ class HeroWorkshopApp:
         for name, levels in self.game.building_levels.items():
             for idx in range(len(levels)):
                 self.game.start_building_production(name, idx)
-        self.game.add_log("\U0001f4c2 \u8bfb\u6863\u6210\u529f!")
-        self._show_toast("\u8bfb\u6863\u6210\u529f!")
+        self.game.add_log("\U0001f4c2 读档成功!")
+        self._show_toast("读档成功!")
 
     def _show_help(self, e=None):
         self.page.dialog = ft.AlertDialog(
-            title=ft.Text("\u5e2e\u52a9"),
+            title=ft.Text("帮助"),
             content=ft.Text(
-                "\u52c7\u8005\u5de5\u574a v5.1\n\n"
-                "\u2694 \u6218\u6597: \u961f\u4f0d\u5168\u5458\u968f\u673a\u653b\u51fb\n"
-                "\u26a1 \u81ea\u52a8: \u6301\u7eed\u6218\u6597\n"
-                "\U0001f3d7 \u5efa\u9020: \u6d88\u8017\u8d44\u6e90\n"
-                "\U0001f5fa \u5730\u56fe: \u5207\u6362\u5730\u56fe\n"
+                "勇者工坊 v5.1\n\n"
+                "⚔ 战斗: 队伍全员随机攻击\n"
+                "⚡ 自动: 持续战斗\n"
+                "\U0001f3d7 建造: 消耗资源\n"
+                "\U0001f5fa 地图: 切换地图\n"
             ),
             actions=[ft.TextButton("OK", on_click=lambda e: setattr(self.page, "dialog", None) or self.page.update())],
         )

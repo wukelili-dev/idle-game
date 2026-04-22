@@ -51,6 +51,18 @@ hero_workshop/
 
 # 📜 更新日志
 
+## v5.2 (2026-04-22) - Bug Fix & UI Polish
+
+### Bug Fixes
+- **英雄属性标签不显示**: `_init_hero_stats` 创建的控件未 append 到容器
+- **战斗无法触发**: `_battle_thread` 提前设 `is_battling=True`，与 `battle_team` 内部检查冲突
+- **刷新覆盖样式**: `_refresh_all_ui` 覆盖地图/队伍按钮的字体大小
+- **商店品质无颜色**: WEAPONS/ARMORS 无 `rarity_idx` 字段，改为按索引分5档
+
+### UI 改进
+- **字体统一**: 地图/队伍按钮字体改 `size=14 weight=W_500`，去除 scale 缩小
+- **商店品质颜色**: 武器/护甲按索引分5档，白#cccccc / 蓝#4FC3F7 / 紫#BA68C8 / 橙#FFA726 / 红#EF5350
+
 ## v5.1 (2026-04-21~22) - Flet 重构
 
 ### 重大变更
