@@ -65,6 +65,13 @@ class HeroWorkshopApp:
         self.member_buttons = {}
         self.building_btns = {}
         self.wonder_btns = {}
+        # 拖拽分栏属性
+        self._dragging_divider = None
+        self._left_width = 230
+        self._right_width = 400
+
+        self._drag_start_x = 0
+        self._load_panel_widths()
         self._build_top_bar()
         self._build_body()
         self._build_bottom_bar()
@@ -77,24 +84,138 @@ class HeroWorkshopApp:
 
     # ─── Top Bar ────────────────────────────────────────────────
     def _build_top_bar(self):
-        ab = ft.AppBar(title=ft.Text("⚔ 勇者工坊 v5.1", size=18, weight=ft.FontWeight.BOLD))
         self._ref("kills_label", ft.Text("击杀: 0", size=13, color=Cs("GREY_500")))
-        self._ref("gold_label", ft.Text("\U0001fa99 100", size=15, weight=ft.FontWeight.BOLD, color="#B8860B"))
-        ab.actions = [
+        self._ref("gold_label", ft.Text("💡 100", size=15, weight=ft.FontWeight.BOLD, color="#B8860B"))
+        ab = ft.AppBar(title=ft.Text("⚔ 勇者工坊 v5.1", size=18, weight=ft.FontWeight.BOLD), actions=[
             self._refs["kills_label"],
             ft.Container(width=20),
             self._refs["gold_label"],
             ft.Container(width=10),
-        ]
+            ft.IconButton(icon=I.MENU, icon_size=22, tooltip="菜单", on_click=lambda e: self._show_menu(e)),
+        ])
         self.page.appbar = ab
 
     # ─── Body ──────────────────────────────────────────────────
     def _build_body(self):
+        self.left_panel_ref = self._build_left()
+        self.center_panel_ref = self._build_center()
+        self.right_panel_ref = self._build_right()
+
+        # 左-中分隔条
+        self.divider1 = self._build_divider(on_drag=1)
+        # 中-右分隔条
+        self.divider2 = self._build_divider(on_drag=2)
+
         self.body = ft.Row(
-            controls=[self._build_left(), self._build_center(), self._build_right()],
-            spacing=4, expand=True,
+            controls=[
+                self.left_panel_ref,
+                self.divider1,
+                self.center_panel_ref,
+                self.divider2,
+                self.right_panel_ref,
+            ],
+            spacing=0, expand=True,
         )
         self.page.add(self.body)
+
+
+
+    def _show_menu(self, e):
+        def close_and(fn):
+            def handler(ev):
+                self.page.pop_dialog()
+                fn()
+            return handler
+        self._menu_dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("⚙ 菜单", size=16, weight=ft.FontWeight.BOLD),
+            content=ft.Column([
+                ft.TextButton("💾 保存布局", on_click=close_and(self._save_layout)),
+                ft.TextButton("🔄 重置布局", on_click=close_and(self._reset_layout)),
+            ], spacing=5),
+            actions=[ft.TextButton("关闭", on_click=lambda e: self.page.pop_dialog())],
+        )
+        self.page.show_dialog(self._menu_dlg)
+
+    def _save_layout(self):
+        self._save_panel_widths()
+        self.page.show_snack_bar(ft.SnackBar(ft.Text("布局已保存"), open=True))
+
+    def _reset_layout(self):
+        self._left_width = 230
+        self._right_width = 400
+        self.left_panel_ref.width = self._left_width
+        self.right_panel_ref.width = self._right_width
+        self._save_panel_widths()
+        self.page.update()
+        self.page.show_snack_bar(ft.SnackBar(ft.Text("布局已重置"), open=True))
+
+    def _build_divider(self, on_drag):
+        bar = ft.Container(
+            width=4, expand=True,
+            bgcolor=ft.Colors.OUTLINE_VARIANT,
+            border_radius=2,
+        )
+        g = ft.GestureDetector(
+            content=ft.Container(
+                width=20, expand=True,
+                alignment=ft.alignment.Alignment(0.5, 0),
+                content=bar,
+            ),
+            drag_interval=0,
+            on_horizontal_drag_start=lambda e: self._on_divider_drag_start(e, on_drag),
+            on_horizontal_drag_update=lambda e: self._on_divider_drag_update(e),
+            on_horizontal_drag_end=lambda e: self._on_divider_drag_end(e),
+            on_hover=lambda e: self._on_divider_hover(e, bar),
+        )
+        return g
+
+    def _on_divider_hover(self, e, bar):
+        bar.bgcolor = ft.Colors.PRIMARY if e.data == 'true' else ft.Colors.OUTLINE_VARIANT
+        bar.update()
+
+    def _on_divider_drag_start(self, e, on_drag):
+        self._dragging_divider = on_drag
+        self._drag_start_x = e.global_position.x
+
+    def _on_divider_drag_update(self, e):
+        if not self._dragging_divider:
+            return
+        dx = e.global_delta.x
+        if self._dragging_divider == 1:
+            self._left_width = max(150, min(400, self._left_width + dx))
+            self.left_panel_ref.width = self._left_width
+            self.left_panel_ref.update()
+        else:
+            self._right_width = max(150, min(600, self._right_width - dx))
+            self.right_panel_ref.width = self._right_width
+            self.right_panel_ref.update()
+        self.body.update()
+
+    def _on_divider_drag_end(self, e):
+        self._dragging_divider = None
+        self._save_panel_widths()
+
+    def _load_panel_widths(self):
+        try:
+            if os.path.exists(SAVE_PATH):
+                data = json.loads(open(SAVE_PATH, 'r', encoding='utf-8').read())
+                pw = data.get('panel_widths', {})
+                self._left_width = pw.get('left', 230)
+                self._right_width = pw.get('right', 400)
+        except:
+            pass
+
+    def _save_panel_widths(self):
+        try:
+            if os.path.exists(SAVE_PATH):
+                data = json.loads(open(SAVE_PATH, 'r', encoding='utf-8').read())
+            else:
+                data = {}
+            data['panel_widths'] = {'left': self._left_width, 'right': self._right_width}
+            open(SAVE_PATH, 'w', encoding='utf-8').write(json.dumps(data, ensure_ascii=False, indent=2))
+        except:
+            pass
 
     # ─── Left Panel ─────────────────────────────────────────────
     def _build_left(self):
@@ -118,9 +239,9 @@ class HeroWorkshopApp:
             col.controls.append(ft.Row([
                 ft.Text(f"{icon} {name}:", size=13, expand=2),
                 self._ref(f"res_{name}", ft.Text("0", size=13, weight=ft.FontWeight.BOLD, expand=1)),
-                ft.IconButton(icon=I.REMOVE, icon_size=15, on_click=lambda e, n=name: self._sell_mat(n)),
+                ft.IconButton(icon=I.REMOVE, icon_size=15, on_click=lambda e, n=name: self._sell_mat(n, 1)),
                 ft.Text("\xd7", size=12),
-                ft.IconButton(icon=I.ADD, icon_size=15, on_click=lambda e, n=name: self._buy_mat(n)),
+                ft.IconButton(icon=I.ADD, icon_size=15, on_click=lambda e, n=name: self._buy_mat(n, 1)),
             ], spacing=2, tight=True))
 
         # Buildings
@@ -143,41 +264,61 @@ class HeroWorkshopApp:
         for wname in get_wonder_names():
             self.wonder_cards.controls.append(self._build_wonder_card(wname))
 
-        return ft.Container(content=col, width=230, padding=4, bgcolor=Cs("SURFACE_CONTAINER_LOWEST"))
+        return self._ref("left_panel", ft.Container(content=col, width=self._left_width, padding=4, bgcolor=Cs("SURFACE_CONTAINER_LOWEST")))
+
+    def _build_instance_card(self, name, idx, level, workers, max_workers, output, interval):
+        cfg = BUILDING_CONFIGS[name]
+        hire_cost = cfg.worker_cost.get("金币", 50)
+        return ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Text(f"  #{idx+1} Lv{level}", size=11, expand=True, color=Cs("GREY_700")),
+                    ft.Text(f"{output}/{interval}s", size=10, color=Cs("BLUE_700")),
+                ], spacing=2, tight=True),
+                ft.Row([
+                    ft.OutlinedButton("升级", scale=0.7,
+                                      on_click=lambda e, n=name, i=idx: self._upgrade_building(n, i)),
+                    ft.Text(f"工:{workers}/{max_workers}", size=10, expand=1, color=Cs("GREY_600")),
+                    ft.IconButton(icon=I.REMOVE, icon_size=12,
+                                   on_click=lambda e, n=name, i=idx: self._fire_worker(n, i)),
+                    ft.Text("✕", size=9),
+                    ft.IconButton(icon=I.ADD, icon_size=12,
+                                   on_click=lambda e, n=name, i=idx: self._hire_worker(n, i)),
+                ], spacing=2, tight=True),
+            ], spacing=2),
+            padding=ft.Padding.only(left=4, right=4, top=3, bottom=3),
+            border=ft.Border.all(1, Cs("GREY_300")),
+            border_radius=4,
+            bgcolor="#fafafa",
+        )
 
     def _build_building_card(self, name):
+        """返回建筑标题卡片 + 实例容器。实例卡片在建造/升级时动态刷新。"""
+        instance_ctr = self._ref(f"bld_instances_{name}", ft.Column(spacing=2))
         return ft.Column([
             ft.Container(
-                content=ft.Column([
-                    ft.Row([
-                        ft.Text(name, size=13, weight=ft.FontWeight.BOLD, expand=True),
-                        self._ref(f"bld_count_{name}", ft.Text("x0", size=12, color=Cs("GREY_500"))),
-                    ]),
-                    self._ref(f"bld_info_{name}", ft.Text("未建造", size=11, color=Cs("GREY_400"))),
-                    ft.Row([
-                        ft.Button("建造", scale=0.8, on_click=lambda e, n=name: self._build_building(n)),
-                        self._ref(f"bld_upg_btn_{name}",
-                                  ft.OutlinedButton("升级", scale=0.8,
-                                                    on_click=lambda e, n=name: self._upgrade_building(n))),
-                    ], spacing=4),
-                ], spacing=3),
-                padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=6,
-            ),
-            ft.Container(
                 content=ft.Row([
-                    ft.Text("工人:", size=11, expand=1),
-                    self._ref(f"worker_count_{name}", ft.Text("0/0", size=11, color=Cs("GREY_500"))),
-                    ft.IconButton(icon=I.ADD, icon_size=14, on_click=lambda e, n=name: self._hire_worker(n)),
-                    ft.Text("✕", size=11),
-                    ft.IconButton(icon=I.REMOVE, icon_size=14, on_click=lambda e, n=name: self._fire_worker(n)),
-                ], spacing=2, tight=True),
-                padding=ft.Padding.only(left=6, right=6, bottom=4),
-                bgcolor="#f5f5f5",
+                    ft.Text(name, size=13, weight=ft.FontWeight.BOLD, expand=True),
+                    ft.Container(
+                        content=self._ref(f"bld_count_{name}", ft.Text("x0", size=12, color=Cs("GREY_500"))),
+                        padding=ft.Padding.only(right=4),
+                    ),
+                ]),
+                padding=ft.Padding.only(left=6, top=4, bottom=4),
+                bgcolor=Cs("GREY_100"),
                 border_radius=4,
             ),
-        ], spacing=2)
+            instance_ctr,
+            ft.Container(
+                content=ft.Row([
+                    ft.Text("建造", size=11, expand=1),
+                    ft.Button("建造 +1", scale=0.75,
+                              on_click=lambda e, n=name: self._build_building(n)),
+                ], spacing=4, tight=True),
+                padding=ft.Padding.only(left=4, right=4, bottom=4),
+            ),
+        ], spacing=1)
 
-    # ─── Center Panel ───────────────────────────────────────────
     def _build_wonder_card(self, name):
         wonder_btn = ft.Button("建造奇观", scale=0.9, on_click=lambda e, n=name: self._build_wonder(n))
         self.wonder_btns[name] = wonder_btn
@@ -204,7 +345,7 @@ class HeroWorkshopApp:
         self.team_btns = []
         for i in range(3):
             btn = ft.Button(
-                ft.Text("…" * 3, size=14, weight=ft.FontWeight.W_500), width=120,
+                ft.Text("..." * 3, size=14, weight=ft.FontWeight.W_500), width=120,
                 on_click=lambda e, idx=i: self._switch_member(idx)
             )
             self.team_btns.append(btn)
@@ -311,7 +452,7 @@ class HeroWorkshopApp:
             padding=4,
         ))
         self._restore_auto_potion_ui()
-        
+
         # Add dropdown change handler after UI is built
         def on_auto_potion_change(e):
             self._on_auto_potion_change()
@@ -362,7 +503,7 @@ class HeroWorkshopApp:
             length=8,
             expand=True,
         )
-        return ft.Container(content=self.right_tabs, expand=True, padding=4)
+        return self._ref("right_panel_ref", ft.Container(content=self.right_tabs, width=self._right_width, padding=4))
 
     def _build_weapon_tab(self):
         items = []
@@ -417,7 +558,7 @@ class HeroWorkshopApp:
 
         # 当前装备区
         equip_ctr = ft.Column([
-            ft.Text("—— 当前装备 ——", size=13, weight=ft.FontWeight.BOLD),
+            ft.Text("-- 当前装备 --", size=13, weight=ft.FontWeight.BOLD),
             ft.Row([
                 self._ref("eq_weapon_lbl", ft.Text("武器: 未装备", size=12)),
                 ft.Container(expand=True),
@@ -601,11 +742,11 @@ class HeroWorkshopApp:
                 ], spacing=8),
                 padding=6, bgcolor=Cs("BROWN_900"),
             ),
-            ft.Text("—— 可招募角色 ——",
+            ft.Text("-- 可招募角色 --",
                     size=13, weight=ft.FontWeight.BOLD),
             self._refs["tavern_roster_ctr"],
             ft.Divider(),
-            ft.Text("—— 队伍管理 ——",
+            ft.Text("-- 队伍管理 --",
                     size=13, weight=ft.FontWeight.BOLD),
             self._refs["team_manage_ctr"],
         ], scroll="auto", spacing=4)
@@ -632,7 +773,7 @@ class HeroWorkshopApp:
             ft.Container(content=self._refs["farm_plants_ctr"],
                          border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
                          border_radius=4, padding=4, height=180),
-            ft.Text("—— 种子商店 ——",
+            ft.Text("-- 种子商店 --",
                     size=13, weight=ft.FontWeight.BOLD),
             ft.Container(content=self._refs["farm_seeds_ctr"],
                          border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
@@ -678,7 +819,7 @@ class HeroWorkshopApp:
             self._refs["factory_info_lbl"],
             self._refs["factory_build_btn"],
             ft.Divider(),
-            ft.Text("—— 部门 ——", size=13, weight=ft.FontWeight.BOLD),
+            ft.Text("-- 部门 --", size=13, weight=ft.FontWeight.BOLD),
             ft.Container(content=self._refs["factory_depts_ctr"],
                          border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
                          border_radius=4, padding=4),
@@ -711,6 +852,7 @@ class HeroWorkshopApp:
         while True:
             await asyncio.sleep(0.3)
             self._refresh_all_ui()
+            self._refresh_materials()
             if len(self.game.logs) != last_log_len:
                 self._refresh_log()
                 last_log_len = len(self.game.logs)
@@ -718,6 +860,10 @@ class HeroWorkshopApp:
             elif self.game.is_battling and len(self.game.logs) != battle_log_len:
                 self._refresh_log()
                 battle_log_len = len(self.game.logs)
+            try:
+                self.page.update()
+            except Exception:
+                pass
 
     def _refresh_log(self):
         self.log_view.controls.clear()
@@ -795,22 +941,25 @@ class HeroWorkshopApp:
             bgcolor=Cs("RED_600") if g.auto_battle else Cs("ORANGE_600"))
         self._refs["potions_lbl"].value = f"\U0001f9ea 药水: x{p.potions}"
 
+        # 建筑实例卡片列表（重新构建）
         for bname in get_all_building_names():
             levels = g.building_levels.get(bname, [])
             cnt_ref = self._refs.get(f"bld_count_{bname}")
-            info_ref = self._refs.get(f"bld_info_{bname}")
-            upg_btn = self._refs.get(f"bld_upg_btn_{bname}")
             if cnt_ref:
                 cnt_ref.value = f"x{len(levels)}"
-            if info_ref:
-                if levels:
-                    avg = int(sum(levels) / len(levels))
-                    cfg = BUILDING_CONFIGS[bname]
-                    info_ref.value = f"Lv{avg} {cfg.get_output(avg)}/{cfg.get_interval(avg)}s"
-                else:
-                    info_ref.value = "未建造"
-            if upg_btn:
-                upg_btn.disabled = not levels
+            inst_ctr = self._refs.get(f"bld_instances_{bname}")
+            if inst_ctr:
+                inst_ctr.controls.clear()
+                cfg = BUILDING_CONFIGS[bname]
+                workers_list = g.building_workers.get(bname, [])
+                for idx, lvl in enumerate(levels):
+                    w = workers_list[idx] if idx < len(workers_list) else 0
+                    max_w = cfg.get_max_workers(lvl)
+                    out = cfg.get_output(lvl, w)
+                    iv = cfg.get_interval(lvl)
+                    inst_ctr.controls.append(
+                        self._build_instance_card(bname, idx, lvl, w, max_w, out, iv))
+                inst_ctr.update()
 
         for wname, btn in self.wonder_btns.items():
             if wname in g.wonders:
@@ -821,7 +970,7 @@ class HeroWorkshopApp:
         flbl = self._refs.get("farm_count_lbl")
         if flbl:
             flbl.value = f"\U0001f331 我的农场: {len(g.plants)}/10"
-        
+
         # 更新植物列表
         fctr = self._refs.get("farm_plants_ctr")
         if fctr:
@@ -834,7 +983,7 @@ class HeroWorkshopApp:
                         if status_info["adult"]:
                             status = "\U0001f7e2 可收获"
                             color = Cs("GREEN_600")
-                            btn = ft.Button("收获", scale=0.8, 
+                            btn = ft.Button("收获", scale=0.8,
                                           on_click=lambda e, p=plant: self._harvest_plant(p))
                         else:
                             status = f"{status_info['progress']}"
@@ -844,7 +993,7 @@ class HeroWorkshopApp:
                                 ft.Button("⚡", scale=0.7,
                                           on_click=lambda e, p=plant: self._speedup(p)),
                             ], spacing=4)
-                        
+
                         fctr.controls.append(
                             ft.Container(
                                 content=ft.Column([
@@ -858,7 +1007,7 @@ class HeroWorkshopApp:
                                 bgcolor="#fafafa"
                             )
                         )
-        
+
         # 更新工厂状态
         fsl = self._refs.get("factory_status_lbl")
         if fsl:
@@ -938,7 +1087,7 @@ class HeroWorkshopApp:
                     padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4,
                     bgcolor="#fff8e1" if i == g.current_member_idx else None))
 
-        # 刷新背包和材料（修复战斗掉落后UI不同步）
+        # 刷新背包和材料(修复战斗掉落后UI不同步)
         self._refresh_bag()
         self._refresh_materials()
 
@@ -1055,13 +1204,16 @@ class HeroWorkshopApp:
         ok, msg = self.game.build_building(name)
         self.game.add_log(msg)
 
-    def _upgrade_building(self, name):
+    def _upgrade_building(self, name, idx=None):
         levels = self.game.building_levels.get(name, [])
         if not levels:
             self.game.add_log("先建造!")
             return
-        ok, msg = self.game.upgrade_building(name, len(levels) - 1)
-        self.game.add_log(f"{name} 升级成功!" if ok else f"升级: {msg}")
+        if idx is None:
+            idx = len(levels) - 1
+        ok, msg = self.game.upgrade_building(name, idx)
+        self.game.add_log(f"{name} #{idx+1} 升级成功!" if ok else f"升级: {msg}")
+        self._refresh_all_ui()
 
     def _build_wonder(self, name):
         ok, msg = self.game.build_wonder(name)
@@ -1100,7 +1252,7 @@ class HeroWorkshopApp:
     def _plant_seed(self, pd):
         ok, msg = self.game.plant_seed(pd["id"], cost_gold=pd["seed_price"])
         self.game.add_log(msg)
-        
+
     def _harvest_plant(self, plant):
         ok, msg = self.game.harvest_plant(plant["id"])
         self.game.add_log(msg)
@@ -1125,13 +1277,26 @@ class HeroWorkshopApp:
         ok, msg = self.game.fire_factory_worker()
         self.game.add_log(msg)
 
-    def _hire_worker(self, building_name):
-        ok, msg = self.game.hire_worker(building_name)
+    def _hire_worker(self, building_name, idx=None):
+        levels = self.game.building_levels.get(building_name, [])
+        if not levels:
+            self.game.add_log("建筑未建造")
+            return
+        if idx is None:
+            idx = len(levels) - 1
+        ok, msg = self.game.hire_worker(building_name, idx)
         self.game.add_log(msg)
+        self._refresh_all_ui()
 
-    def _fire_worker(self, building_name):
-        ok, msg = self.game.fire_worker(building_name)
+    def _fire_worker(self, building_name, idx=None):
+        levels = self.game.building_levels.get(building_name, [])
+        if not levels:
+            return
+        if idx is None:
+            idx = len(levels) - 1
+        ok, msg = self.game.fire_worker(building_name, idx)
         self.game.add_log(msg)
+        self._refresh_all_ui()
 
     # ─── Save / Load ────────────────────────────────────────────
     def _save(self, e=None):

@@ -1,0 +1,23 @@
+def _build_right(self):
+        self._tab_bar = ft.TabBar(
+            tabs=[
+                ft.Tab(label="⚔ 武器"),
+                ft.Tab(label="\U0001f6e1 护甲"),
+                ft.Tab(label="\U0001f381 杂货"),
+                ft.Tab(label="\U0001f392 背包"),
+                ft.Tab(label="⭐ 材料"),
+                ft.Tab(label="\U0001f37a 酒馆"),
+                ft.Tab(label="\U0001f331 农场"),
+                ft.Tab(label="\U0001f3ed 工厂"),
+            ],
+        )
+        self._tab_contents = [
+            self._build_weapon_tab(),
+            self._build_armor_tab(),
+            self._build_novelty_tab(),
+            self._build_bag_tab(),
+            self._build_materials_tab(),
+            self._build_tavern_tab(),
+            self._build_farm_tab(),
+            self._build_factory_tab(),
+     

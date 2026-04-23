@@ -1,0 +1,19 @@
+def _build_body(self):
+        self.left_panel_ref = self._build_left()
+        self.center_panel_ref = self._build_center()
+        self.right_panel_ref = self._build_right()
+
+        # 左-中分隔条
+        self.divider1 = self._build_divider(on_drag=1)
+        # 中-右分隔条
+        self.divider2 = self._build_divider(on_drag=2)
+
+        self.body = ft.Row(
+            controls=[
+                self.left_panel_ref,
+                self.divider1,
+                self.center_panel_ref,
+                self.divider2,
+                self.right_panel_ref,
+            ],
+            spacing=0, expand=True,

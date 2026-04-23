@@ -18,10 +18,10 @@
 
 ```bash
 cd D:\pyproject\hero_workshop
-python main_flet.py
+python main.py
 ```
 
-> 旧版 Tkinter 界面仍可通过 `python main.py` 启动，但不再维护。
+> 旧版 Tkinter 界面可通过 `python main_tkinter.py` 启动（已归档），不再维护。
 
 ## 项目结构
 
@@ -40,8 +40,8 @@ hero_workshop/
 │   ├── factory.py       # 工厂系统
 │   ├── tavern.py        # 酒馆系统
 │   └── inventory.py     # 背包系统（已在其他位置提到，保留）
-├── main_flet.py         # Flet 主入口（V5.1）
-├── main.py              # Tkinter 主入口（旧版，不再维护）
+├── main.py              # Flet 主入口（当前版本）
+├── main_tkinter.py     # Tkinter 主入口（旧版，已归档）
 ├── FLET_MIGRATION_PLAN.md  # Flet 迁移计划
 ├── CHANGELOG.md         # 更新日志
 └── README.md            # 说明文档
@@ -50,6 +50,22 @@ hero_workshop/
 ---
 
 # 📜 更新日志
+
+## v5.4 (2026-04-23) - Bug Fix
+
+### Bug Fixes
+- **材料数量不刷新**: 建筑生产后台线程直接写 `self.game.resources`，但 `_update_loop` 只在有新日志时才调 `page.update()`，导致材料数量栏（`res_*` / `mat_*_cnt`）在空闲产出期间不刷新。修复：`_update_loop` 末尾增加 `self.page.update()`，确保每 0.3s 周期都完整刷新 UI
+- **工人产量加成从未生效**: `produce_resource()` 中 `config.get_output(level)` 未传 `worker_count` 参数，默认为 0，导致每工人 +50% 产量加成从未生效。修复：`game_core.py` 中改为 `config.get_output(level, workers)`
+- **建筑 UI 多实例无法区分**: 每个建筑可建多个实例，但 UI 只有一张卡片，无法指定操作哪个实例。重构：`_build_building_section()` 改为「建筑名标题行 + N 个实例卡片」结构，升级/雇工/解雇按钮带实例索引 `idx`，默认操作最新建造的实例
+- **工人数量 "0/0" 不刷新**: `_refresh_all_ui` 从未更新 `worker_count_{name}` ref，只更新了按钮 disabled 状态但未更新显示数字。修复：从 `self.game.building_workers[name]` 取工人数，`BUILDING_CONFIGS[name].get_max_workers()` 取最大值，格式化为 "当前/最大" 更新显示
+- **招募/解雇工人参数缺失**: `GameCore.hire_worker(name, idx)` / `fire_worker(name, idx)` 需要实例索引 `idx`，但 UI lambda 只捕获了建筑名。修复：默认 `idx = len(levels) - 1`，操作最新实例，同时加未建造防护
+- **建筑未建造时工人栏未禁用**: 未建造时工人栏应灰色禁用不可操作。修复：工人栏 Container 初始 `opacity=0.5` + `bgcolor=GREY_200`；`+`/`-` 按钮初始 `disabled=True`；建造后自动恢复
+
+## v5.3 (2026-04-22)
+
+### 新功能
+- **可拖拽分栏**: 鼠标拖拽调整左/中/右三栏宽度，顺滑实时响应
+- **布局记忆**: 宽度保存到存档，加载恢复
 
 ## v5.2 (2026-04-22) - Bug Fix & UI Polish
 

@@ -453,8 +453,9 @@ class GameCore:
                 if idx >= len(levels):
                     break
                 level = levels[idx]
+                workers = self.building_workers[name][idx]
                 interval = config.get_interval(level)
-                output = config.get_output(level)
+                output = config.get_output(level, workers)
                 time.sleep(interval)
 
                 levels2 = self.building_levels.get(name, [])
