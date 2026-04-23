@@ -47,71 +47,82 @@ def generate_armor_name(perfect=False):
 
 
 def get_rarity_by_monster_level(level):
-    """根据怪物等级确定掉落稀有度"""
+    """根据怪物等级确定掉落稀有度（重设计版 - 掉率大幅提升）"""
     roll = random.random()
     
     if level >= 20:  # 高级地图
-        if roll < 0.02:  # 2%传说
+        if roll < 0.05:    # 5%传说
             return "传说"
-        elif roll < 0.10:  # 8%史诗
+        elif roll < 0.20:   # 15%史诗
             return "史诗"
-        elif roll < 0.25:  # 15%稀有
+        elif roll < 0.45:   # 25%稀有
             return "稀有"
-        else:
+        else:              # 55%普通
             return "普通"
+            
     elif level >= 15:  # 中级地图
-        if roll < 0.05:
+        if roll < 0.02:
+            return "传说"
+        elif roll < 0.10:
             return "史诗"
-        elif roll < 0.15:
+        elif roll < 0.25:
             return "稀有"
-        elif roll < 0.30:
+        elif roll < 0.50:
             return "普通"
         else:
-            return None  # 不掉装备
+            return None
+            
     elif level >= 10:  # 初级进阶
         if roll < 0.05:
+            return "史诗"
+        elif roll < 0.20:
             return "稀有"
-        elif roll < 0.15:
+        elif roll < 0.50:
             return "普通"
         else:
             return None
-    else:  # 新手地图
-        if roll < 0.05:
+            
+    else:  # 新手地图 (Lv1-9)
+        if roll < 0.10:
+            return "稀有"
+        elif roll < 0.40:
             return "普通"
         else:
             return None
 
 
-def get_perfect_drop_chance(level):
-    """获取极品装备掉落概率"""
+def get_perfect_drop_chance(level, is_boss=False):
+    """获取极品装备掉落概率（重设计版）"""
+    if is_boss:
+        return 0.08  # Boss 8%
     if level >= 20:
-        return 0.02  # 2%
+        return 0.03  # 3%
     elif level >= 15:
-        return 0.01  # 1%
+        return 0.015  # 1.5%
     elif level >= 10:
-        return 0.005  # 0.5%
-    return 0
+        return 0.008  # 0.8%
+    return 0.003  # Lv1-9: 0.3%
 
 
 def generate_weapon(level, rarity="普通", is_perfect=False, is_boss=False):
-    """生成武器"""
+    """生成武器（重设计版 - 属性范围扩大，暴击伤害差异化）"""
     base_stats = {
-        "普通": {"attack": (3, 8), "crit_rate": (0, 3)},
-        "稀有": {"attack": (6, 12), "crit_rate": (3, 8)},
-        "史诗": {"attack": (12, 22), "crit_rate": (8, 15)},
-        "传说": {"attack": (22, 38), "crit_rate": (15, 25)},
+        "普通": {"attack": (8, 20), "crit_rate": (0, 5), "crit_dmg": (150, 150)},
+        "稀有": {"attack": (22, 45), "crit_rate": (5, 12), "crit_dmg": (150, 160)},
+        "史诗": {"attack": (50, 90), "crit_rate": (12, 22), "crit_dmg": (160, 180)},
+        "传说": {"attack": (100, 150), "crit_rate": (20, 35), "crit_dmg": (170, 200)},
     }
     
     stats = base_stats.get(rarity, base_stats["普通"])
     
-    # 根据怪物等级缩放（更温和）
-    scale = 1 + (level - 1) * 0.05
+    # 缩放公式：每级+3%基础属性（比旧版+5%更温和）
+    scale = 1 + (level - 1) * 0.03
     if is_boss:
-        scale *= 1.3
+        scale *= 1.25  # Boss加成25%
     
     attack = int(random.randint(stats["attack"][0], stats["attack"][1]) * scale)
-    crit_rate = int(random.randint(stats["crit_rate"][0], stats["crit_rate"][1]) * min(scale, 1.5))
-    crit_rate = min(crit_rate, 50)  # 暴击概率最高50%
+    crit_rate = min(50, random.randint(stats["crit_rate"][0], stats["crit_rate"][1]))
+    crit_dmg = random.randint(stats["crit_dmg"][0], stats["crit_dmg"][1])
     
     name = generate_weapon_name(is_perfect)
     
@@ -122,19 +133,23 @@ def generate_weapon(level, rarity="普通", is_perfect=False, is_boss=False):
         "rarity_color": "#FF5555" if is_perfect else RARITY.get(rarity, {}).get("color", "#AAAAAA"),
         "attack": attack,
         "crit_rate": crit_rate,
-        "crit_dmg": 150,
+        "crit_dmg": crit_dmg,
         "special": None,
         "level_req": 0 if is_perfect else max(1, level - 2),
         "is_perfect": is_perfect,
     }
     
-    # 极品装备自带吸血，属性在传说基础上提升50%
+    # 极品装备：在传说基础上×1.4，无等级限制，必带特殊属性，暴击伤害固定200%
     if is_perfect:
-        equip["special"] = {"name": "吸血", "value": random.randint(8, 15)}
+        equip["attack"] = int(equip["attack"] * 1.4)
+        equip["crit_rate"] = min(50, int(equip["crit_rate"] * 1.2))
         equip["level_req"] = 0
-        # 极品装备属性在传说基础上提升50%
-        equip["attack"] = int(equip["attack"] * 1.5)
-        equip["crit_rate"] = min(50, int(equip["crit_rate"] * 1.3))
+        equip["crit_dmg"] = 200
+        equip["special"] = random.choice([
+            {"name": "吸血", "value": random.randint(10, 20)},
+            {"name": "破甲", "value": random.randint(15, 25)},
+            {"name": "连击", "value": random.randint(10, 18)},
+        ])
     
     # 史诗/传说有概率带特殊属性
     elif rarity in ["史诗", "传说"] and random.random() < RARITY[rarity]["special_chance"]:
@@ -149,18 +164,18 @@ def generate_weapon(level, rarity="普通", is_perfect=False, is_boss=False):
 
 
 def generate_armor(level, rarity="普通", is_perfect=False, is_boss=False):
-    """生成护甲"""
+    """生成护甲（重设计版 - 属性范围扩大）"""
     base_stats = {
-        "普通": {"defense": (2, 5), "hp_bonus": (10, 30)},
-        "稀有": {"defense": (4, 10), "hp_bonus": (25, 60)},
-        "史诗": {"defense": (10, 20), "hp_bonus": (60, 120)},
-        "传说": {"defense": (20, 35), "hp_bonus": (120, 220)},
+        "普通": {"defense": (4, 12), "hp_bonus": (20, 60)},
+        "稀有": {"defense": (15, 35), "hp_bonus": (70, 150)},
+        "史诗": {"defense": (40, 75), "hp_bonus": (180, 320)},
+        "传说": {"defense": (85, 140), "hp_bonus": (380, 600)},
     }
     
     stats = base_stats.get(rarity, base_stats["普通"])
-    scale = 1 + (level - 1) * 0.05
+    scale = 1 + (level - 1) * 0.03
     if is_boss:
-        scale *= 1.3
+        scale *= 1.25
     
     defense = int(random.randint(stats["defense"][0], stats["defense"][1]) * scale)
     hp_bonus = int(random.randint(stats["hp_bonus"][0], stats["hp_bonus"][1]) * scale)
@@ -179,13 +194,16 @@ def generate_armor(level, rarity="普通", is_perfect=False, is_boss=False):
         "is_perfect": is_perfect,
     }
     
-    # 极品装备自带吸血，属性在传说基础上提升50%
+    # 极品装备：在传说基础上×1.4，无等级限制，必带特殊属性
     if is_perfect:
-        equip["special"] = {"name": "吸血", "value": random.randint(8, 15)}
+        equip["defense"] = int(equip["defense"] * 1.4)
+        equip["hp_bonus"] = int(equip["hp_bonus"] * 1.4)
         equip["level_req"] = 0
-        # 极品装备属性在传说基础上提升50%
-        equip["defense"] = int(equip["defense"] * 1.5)
-        equip["hp_bonus"] = int(equip["hp_bonus"] * 1.5)
+        equip["special"] = random.choice([
+            {"name": "吸血", "value": random.randint(10, 20)},
+            {"name": "反伤", "value": random.randint(15, 25)},
+            {"name": "护盾", "value": random.randint(15, 30)},
+        ])
     
     # 史诗/传说有概率带特殊属性
     elif rarity in ["史诗", "传说"] and random.random() < RARITY[rarity]["special_chance"]:
@@ -223,9 +241,7 @@ def generate_drop(monster_level, is_boss=False):
     
     # 检查极品装备掉落
     is_perfect = False
-    if not is_boss and random.random() < get_perfect_drop_chance(monster_level):
-        is_perfect = True
-    elif is_boss and random.random() < 0.05:  # Boss 5% 极品
+    if random.random() < get_perfect_drop_chance(monster_level, is_boss):
         is_perfect = True
     
     # 生成武器或护甲

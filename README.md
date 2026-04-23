@@ -27,29 +27,66 @@ python main.py
 
 ```
 hero_workshop/
-├── main.py              # 主入口和UI
-├── modules/
-│   ├── hero.py          # 英雄属性
-│   ├── inventory.py     # 背包系统
-│   ├── game_core.py     # 游戏核心逻辑
-│   ├── equipment.py     # 装备定义
-│   ├── equipment_drops.py # 装备掉落
-│   ├── buildings.py     # 建筑系统
-│   ├── maps.py          # 地图和怪物
-│   ├── plants.py        # 植物系统
-│   ├── factory.py       # 工厂系统
-│   ├── tavern.py        # 酒馆系统
-│   └── inventory.py     # 背包系统（已在其他位置提到，保留）
-├── main.py              # Flet 主入口（当前版本）
+├── main.py              # 主入口和UI（Flet）
 ├── main_tkinter.py     # Tkinter 主入口（旧版，已归档）
-├── FLET_MIGRATION_PLAN.md  # Flet 迁移计划
-├── CHANGELOG.md         # 更新日志
+├── modules/
+│   ├── hero.py          # 英雄属性、背包、队伍
+│   ├── game_core.py     # 游戏核心逻辑
+│   ├── tavern.py        # 酒馆系统
+│   ├── buildings.py     # 建筑、奇观配置
+│   ├── equipment.py     # 装备定义（20 武器 + 20 护甲）
+│   ├── equipment_drops.py  # 装备掉落生成
+│   ├── maps.py          # 地图和怪物数据
+│   ├── plants.py        # 农场种植系统
+│   ├── factory.py       # 工坊系统
+│   └── inventory.py     # 杂货物品定义
+├── FLET_MIGRATION_PLAN.md  # 使用与维护手册
 └── README.md            # 说明文档
 ```
 
 ---
 
 # 📜 更新日志
+
+## v5.6 (2026-04-24) - 数值平衡调整
+
+### 商店/掉落装备平衡
+- **装备等级限制**: 所有商店装备新增 `level_req` 字段，1-5级每级+2，6-10级每级+3，11-15级每级+4，16-20级每级+5
+- **暴击伤害差异化**: 武器 `crit_dmg` 按稀有度区分（150%-200%），不再固定150%
+- **掉落率大幅提升**: 新手期普通掉率 5%→40%，传说掉率固定 3%，Boss 掉落加成 25%
+- **极品装备增强**: 属性倍率 ×1.5→×1.4，`crit_dmg` 固定 200%，必带特殊属性
+- **属性缩放系数**: `scale` 从 0.05 改为 0.03，高等级怪物掉落属性增幅更平滑
+- **购买等级检查**: `buy_weapon()` / `buy_armor()` 增加 `level_req` 检查，等级不足无法购买
+
+### 怪物属性重平衡
+- **属性全面提升**: 22种怪物 HP/ATK/DEF 大幅提升（HP 2.2x-3.6x，ATK 1.75x-2.7x，DEF 1.5x-2x）
+- **同级击杀 5-8 刀**: 适配新伤害公式，消除一刀秒怪问题
+- **东海龙虾重命名**: 东海「龙虾」改名为「深海龙虾」，避免与傲来国龙虾key冲突
+- **DROP物品不变**: 仅调属性，掉落配置保持原样
+
+---
+
+## v5.5 (2026-04-23) - 数值系统重设计
+
+### 伤害公式重设计
+- **新伤害公式**: `ATK × (1 - DEF/(DEF+50)) × random(0.9,1.1)`，最小值为1
+  - 旧公式: `max(1, ATK - DEF//2 + random(-3,3))` (固定减伤)
+  - 新公式: 防御衰减曲线，高防御仍有减伤效果但不无限堆叠
+- **暴击伤害改武器倍率**: 从固定 1.5x 改为武器 `crit_dmg` 字段（默认150）
+  - 不同武器可有不同暴击倍率，增强装备差异化
+- **新增 calc_damage() 函数**: `game_core.py` 统一伤害计算入口
+- **battle() / battle_team() 全适配**: 玩家攻击、敌人攻击、队友攻击、怪物攻击全部改用新公式
+
+### 英雄成长曲线重设计
+- **二次方经验曲线**: `50×level + 10×level²`，升级需求随等级加速增长
+  - Lv1→2: 60exp, Lv30→31: 9600exp (160倍差距)
+- **属性公式统一**: 新增 `get_base_max_hp()` / `get_base_attack()` / `get_base_defense()` / `get_exp_needed()`
+  - 主角: `HP=98+level×12+里程碑, ATK=7+level×3+里程碑, DEF=3+level×2+里程碑`
+  - 队友: 约为主角75%系数（`copy_for_recruit()` 独立公式）
+- **里程碑系统**: 每5级额外 +5HP / +1ATK / +1DEF，升级提示「里程碑加成」
+- **存档兼容**: `from_dict()` 旧存档无属性字段时用新公式计算初始值
+
+---
 
 ## v5.4 (2026-04-23) - Bug Fix
 

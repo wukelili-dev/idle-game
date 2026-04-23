@@ -1,4 +1,4 @@
-﻿"""
+"""
 游戏核心模块 - 游戏逻辑主类
 """
 import time
@@ -17,6 +17,23 @@ from .factory import (FACTORY_BUILD_COST, FACTORY_BASE_INTERVAL_S,
                       FACTORY_BASE_PROFIT, DEPARTMENTS, MAX_FACTORY_WORKERS,
                       FACTORY_WORKER_COST_GOLD, get_dept_by_id,
                       calc_factory_bonus)
+
+
+# ═══════════════ 伤害公式常量 ═══════════════
+DEF_COEFF = 50  # 防御衰减系数，DEF越高中和收益递减越慢
+
+
+def calc_damage(attack, defense):
+    """计算伤害（使用防御衰减公式）
+    
+    公式: 伤害 = ATK × (1 - DEF/(DEF+50)) × random(0.9~1.1)
+    - 防御永远有意义，永远不会锁死为0
+    - 每点防御的边际收益递减（防止高防无解）
+    """
+    reduction = defense / (defense + DEF_COEFF)
+    base = attack * (1 - reduction)
+    variance = random.uniform(0.9, 1.1)
+    return max(1, int(base * variance))
 
 
 class GameCore:
@@ -524,6 +541,9 @@ class GameCore:
 
     def buy_weapon(self, wpn):
         """购买武器（进入背包）"""
+        # 等级检查
+        if self.player.level < wpn.get("level_req", 0):
+            return False, f"等级不足! 需要 Lv.{wpn['level_req']}"
         if not self.can_afford(wpn["cost"]):
             return False, "资源不足!"
         if self.player.inventory.is_full():
@@ -549,6 +569,9 @@ class GameCore:
 
     def buy_armor(self, arm):
         """购买护甲（进入背包）"""
+        # 等级检查
+        if self.player.level < arm.get("level_req", 0):
+            return False, f"等级不足! 需要 Lv.{arm['level_req']}"
         if not self.can_afford(arm["cost"]):
             return False, "资源不足!"
         if self.player.inventory.is_full():
@@ -688,11 +711,12 @@ class GameCore:
         self.add_log(f"战斗: 英雄 vs {enemy_data['name']}{boss_tag}")
 
         while e_hp > 0 and self.player.hp > 0:
-            # 玩家攻击
-            p_dmg = max(1, self.player.get_total_attack() - enemy_data["defense"] // 2 + random.randint(-3, 3))
+            # 玩家攻击怪物
+            p_dmg = calc_damage(self.player.get_total_attack(), enemy_data["defense"])
             is_crit = random.randint(1, 100) <= self.player.get_crit_rate()
+            crit_mult = self.player.weapon.get("crit_dmg", 150) if isinstance(self.player.weapon, dict) else 150
             if is_crit:
-                p_dmg = int(p_dmg * 1.5)
+                p_dmg = int(p_dmg * crit_mult / 100)
                 self.add_log(f"  暴击! {p_dmg} 伤害!")
             else:
                 self.add_log(f"  你对敌人造成 {p_dmg} 伤害")
@@ -717,8 +741,8 @@ class GameCore:
             if e_hp <= 0:
                 break
 
-            # 敌人攻击
-            e_dmg = max(1, enemy_data["attack"] - self.player.get_total_defense() // 2 + random.randint(-2, 2))
+            # 敌人攻击怪物
+            e_dmg = calc_damage(enemy_data["attack"], self.player.get_total_defense())
             self.player.take_damage(e_dmg)
             self.add_log(f"  {enemy_data['name']} 对英雄造成 {e_dmg} 伤害")
 
@@ -1055,10 +1079,11 @@ class GameCore:
                 if member.hp <= 0:
                     continue
 
-                p_dmg = max(1, member.get_total_attack() - enemy_data['defense'] // 2 + random.randint(-3, 3))
+                p_dmg = calc_damage(member.get_total_attack(), enemy_data['defense'])
                 is_crit = random.randint(1, 100) <= member.get_crit_rate()
+                crit_mult = member.weapon.get("crit_dmg", 150) if isinstance(member.weapon, dict) else 150
                 if is_crit:
-                    p_dmg = int(p_dmg * 1.5)
+                    p_dmg = int(p_dmg * crit_mult / 100)
                     self.add_log('  {0} 暴击! {1} 伤害!'.format(member.role_name, p_dmg))
                 else:
                     self.add_log('  {0} 攻击造成 {1} 伤害'.format(member.role_name, p_dmg))
@@ -1080,7 +1105,7 @@ class GameCore:
             if not alive:
                 break
             target = random.choice(alive)
-            e_dmg = max(1, enemy_data['attack'] - target.get_total_defense() // 2 + random.randint(-2, 2))
+            e_dmg = calc_damage(enemy_data['attack'], target.get_total_defense())
             target.take_damage(e_dmg)
             self.add_log('  {0} 攻击 {1} -{2} HP'.format(enemy_data['name'], target.role_name, e_dmg))
 

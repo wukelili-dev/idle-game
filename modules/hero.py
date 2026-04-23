@@ -8,20 +8,20 @@ from .inventory import Inventory
 class Hero:
     """英雄类"""
     def __init__(self):
-        self.hp = 100
-        self.max_hp = 100
-        self.attack = 10
-        self.defense = 5
-        self.exp = 0
         self.level = 1
+        self.max_hp = self.get_base_max_hp()  # 98
+        self.hp = self.max_hp
+        self.attack = self.get_base_attack()  # 7
+        self.defense = self.get_base_defense()  # 3
+        self.exp = 0
         self.gold = 100
         self.weapon = None
         self.armor = None
         self.kill_count = 0
         self.potions = 0
-        self.inventory = Inventory()  # 背包对象
-        self.is_player = True   # True=主角，False=队友
-        self.role_name = "勇者"  # 显示名称
+        self.inventory = Inventory()
+        self.is_player = True
+        self.role_name = "勇者"
 
     def add_to_inventory(self, equip):
         """添加装备到背包"""
@@ -52,6 +52,22 @@ class Hero:
     def get_inventory(self):
         """获取背包对象"""
         return self.inventory
+
+    def get_base_max_hp(self):
+        """计算基础最大HP（不含装备）"""
+        return 80 + self.level * 18 + (self.level // 5) * 5
+
+    def get_base_attack(self):
+        """计算基础攻击力（不含装备）"""
+        return 5 + self.level * 2 + (self.level // 5)
+
+    def get_base_defense(self):
+        """计算基础防御力（不含装备）"""
+        return 2 + self.level + (self.level // 5)
+
+    def get_exp_needed(self):
+        """计算升到下一级所需经验"""
+        return 50 * self.level + 10 * self.level ** 2
 
     def get_total_attack(self):
         """获取总攻击力（基础+武器）"""
@@ -98,15 +114,26 @@ class Hero:
         self.exp += amount
         level_up_msgs = []
         
-        while self.exp >= self.level * 100 and self.level < MAX_LEVEL:
-            exp_needed = self.level * 100
+        while self.exp >= self.get_exp_needed() and self.level < MAX_LEVEL:
+            exp_needed = self.get_exp_needed()
             self.exp -= exp_needed
             self.level += 1
-            self.max_hp += 20
-            self.hp = min(self.hp + 20, self.get_max_hp_with_bonus())
-            self.attack += 3
-            self.defense += 2
+            
+            # 重新计算属性（使用新公式）
+            old_max_hp = self.max_hp
+            self.max_hp = self.get_base_max_hp()
+            self.attack = self.get_base_attack()
+            self.defense = self.get_base_defense()
+            
+            # 升级时恢复部分HP
+            hp_gain = self.max_hp - old_max_hp
+            self.hp = min(self.hp + hp_gain, self.get_max_hp_with_bonus())
+            
             level_up_msgs.append(f"升级了! 现在是 {self.level} 级!")
+            
+            # 里程碑提示
+            if self.level % 5 == 0:
+                level_up_msgs.append(f"★ 里程碑达成! 属性额外提升!")
             
             if self.level >= MAX_LEVEL:
                 level_up_msgs.append("恭喜! 已达到最高等级100级!")
@@ -127,12 +154,13 @@ class Hero:
         recruit = Hero()
         recruit.is_player = False
         recruit.role_name = role_name
-        # 基础属性与等级挂钩
         recruit.level = max(1, level)
-        recruit.max_hp = 80 + (recruit.level - 1) * 18
+        
+        # 队友使用独立公式（约主角75%）
+        recruit.max_hp = 60 + recruit.level * 14 + (recruit.level // 5) * 4
         recruit.hp = recruit.max_hp
-        recruit.attack = 8 + (recruit.level - 1) * 2
-        recruit.defense = 4 + (recruit.level - 1) * 2
+        recruit.attack = 4 + (recruit.level * 3 // 2) + (recruit.level // 5)
+        recruit.defense = 1 + (recruit.level * 4 // 5) + (recruit.level // 10)
         recruit.exp = 0
         recruit.gold = 0
         # 共享背包由 GameCore 管理，此处 inventory 不使用
@@ -160,12 +188,21 @@ class Hero:
 
     def from_dict(self, data):
         """从字典加载（用于读档）"""
-        self.hp = data.get("hp", 100)
-        self.max_hp = data.get("max_hp", 100)
-        self.attack = data.get("attack", 10)
-        self.defense = data.get("defense", 5)
-        self.exp = data.get("exp", 0)
         self.level = data.get("level", 1)
+        
+        # 旧存档兼容：如果存档有属性值，使用存档值；否则用新公式计算
+        if "max_hp" in data:
+            self.max_hp = data["max_hp"]
+            self.attack = data.get("attack", self.get_base_attack())
+            self.defense = data.get("defense", self.get_base_defense())
+        else:
+            # 无存档属性，用新公式计算
+            self.max_hp = self.get_base_max_hp()
+            self.attack = self.get_base_attack()
+            self.defense = self.get_base_defense()
+        
+        self.hp = data.get("hp", self.max_hp)
+        self.exp = data.get("exp", 0)
         self.gold = data.get("gold", 100)
         self.weapon = data.get("weapon", None)
         self.armor = data.get("armor", None)
