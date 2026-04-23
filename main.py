@@ -219,7 +219,7 @@ class HeroWorkshopApp:
 
     # ─── Left Panel ─────────────────────────────────────────────
     def _build_left(self):
-        col = ft.Column(spacing=0, scroll="auto", expand=True)
+        col = ft.Column(spacing=0, expand=True)
 
         # Resources
         col.controls.append(ft.Container(
@@ -264,7 +264,9 @@ class HeroWorkshopApp:
         for wname in get_wonder_names():
             self.wonder_cards.controls.append(self._build_wonder_card(wname))
 
-        return self._ref("left_panel", ft.Container(content=col, width=self._left_width, padding=4, bgcolor=Cs("SURFACE_CONTAINER_LOWEST")))
+        ret = self._ref("left_panel", ft.Container(content=col, width=self._left_width, expand=True, padding=4, bgcolor=Cs("SURFACE_CONTAINER_LOWEST")))
+
+        return ret
 
     def _build_instance_card(self, name, idx, level, workers, max_workers, output, interval):
         cfg = BUILDING_CONFIGS[name]
@@ -503,7 +505,7 @@ class HeroWorkshopApp:
             length=8,
             expand=True,
         )
-        return self._ref("right_panel_ref", ft.Container(content=self.right_tabs, width=self._right_width, padding=4))
+        return self._ref("right_panel_ref", ft.Container(content=self.right_tabs, width=self._right_width, expand=True, padding=4))
 
     def _build_weapon_tab(self):
         items = []
@@ -740,7 +742,7 @@ class HeroWorkshopApp:
                     ft.Button("\U0001f504 刷新 (50G)", scale=0.85,
                                        on_click=self._tavern_refresh),
                 ], spacing=8),
-                padding=6, bgcolor=Cs("BROWN_900"),
+                padding=6, bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
             ),
             ft.Text("-- 可招募角色 --",
                     size=13, weight=ft.FontWeight.BOLD),
@@ -851,19 +853,19 @@ class HeroWorkshopApp:
         battle_log_len = 0
         while True:
             await asyncio.sleep(0.3)
-            self._refresh_all_ui()
-            self._refresh_materials()
-            if len(self.game.logs) != last_log_len:
-                self._refresh_log()
-                last_log_len = len(self.game.logs)
-                battle_log_len = len(self.game.logs)
-            elif self.game.is_battling and len(self.game.logs) != battle_log_len:
-                self._refresh_log()
-                battle_log_len = len(self.game.logs)
             try:
+                self._refresh_all_ui()
+                self._refresh_materials()
+                if len(self.game.logs) != last_log_len:
+                    self._refresh_log()
+                    last_log_len = len(self.game.logs)
+                    battle_log_len = len(self.game.logs)
+                elif self.game.is_battling and len(self.game.logs) != battle_log_len:
+                    self._refresh_log()
+                    battle_log_len = len(self.game.logs)
                 self.page.update()
-            except Exception:
-                pass
+            except RuntimeError:
+                break
 
     def _refresh_log(self):
         self.log_view.controls.clear()
