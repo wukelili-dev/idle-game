@@ -6,7 +6,6 @@ _*.py
 !.gitignore
 !README.md
 !CHANGELOG.md
-!save.json
 .openclaw/
 *.md
 !README.md
