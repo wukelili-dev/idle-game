@@ -1060,7 +1060,8 @@ class GameCore:
         if self.is_battling:
             return False, '战斗中...'
 
-        self.heal_full_team()
+        # 战斗前不清满HP，只在战斗失败时恢复50%
+        # self.heal_full_team()  # 已移除，防止战斗后下一场突然满血
         self.is_battling = True
         e_hp = enemy_data['hp']
         boss_tag = ' [BOSS]' if is_boss else ''
