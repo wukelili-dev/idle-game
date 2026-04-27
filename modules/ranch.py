@@ -420,15 +420,15 @@ RANCH_CATALOG = [
     },
     {
         "id": "rhino_gray",
-        "name": "犀牛",
+        "name": "甲犀",
         "icon": "🦏",
         "desc": "皮坚甲厚，正面冲锋无惧",
         "rarity": 3,
         "price": 140,
         "feed_cost": 70,
         "personality": "忠诚",
-        "output_type": "犀角",
-        "output_desc": "犀角×1（忠诚+25%）",
+        "output_type": "甲犀角",
+        "output_desc": "甲犀角×1（忠诚+25%）",
         "growth_stages": [],
         "special": "",
     },
@@ -463,8 +463,8 @@ RANCH_CATALOG = [
         "special": "",
     },
     {
-        "id": "fairy_angel",
-        "name": "天使",
+        "id": "baiyu",
+        "name": "白羽",
         "icon": "👼",
         "desc": "羽翼洁白，治愈之力温和",
         "rarity": 3,
@@ -550,5 +550,4 @@ RANCH_CATALOG = [
     },
 ]
 
-# END_RANCH_CATALOG
-# END_RANCH_CATALOG
+ 
