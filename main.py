@@ -301,6 +301,14 @@ class HeroWorkshopApp:
             bgcolor="#fafafa",
         )
 
+    @staticmethod
+    def _fmt_build_cost(name):
+        from modules.buildings import get_building_config
+        cfg = get_building_config(name)
+        if not cfg or not cfg.build_cost:
+            return ""
+        return "需要: " + ", ".join(f"{m}×{v}" for m, v in cfg.build_cost.items())
+
     def _build_building_card(self, name):
         """返回建筑标题卡片 + 实例容器。实例卡片在建造/升级时动态刷新。"""
         instance_ctr = self._ref(f"bld_instances_{name}", ft.Column(spacing=2))
@@ -324,7 +332,11 @@ class HeroWorkshopApp:
                     ft.Button("建造 +1", scale=0.75,
                               on_click=lambda e, n=name: self._build_building(n)),
                 ], spacing=4, tight=True),
-                padding=ft.Padding.only(left=4, right=4, bottom=4),
+                padding=ft.Padding.only(left=4, right=4, bottom=2),
+            ),
+            ft.Container(
+                content=ft.Text(self._fmt_build_cost(name), size=10, color=Cs("GREY_500")),
+                padding=ft.Padding.only(left=6, bottom=4),
             ),
         ], spacing=1)
 
@@ -936,6 +948,7 @@ class HeroWorkshopApp:
             try:
                 self._refresh_all_ui()
                 self._refresh_materials()
+                self.game.ranch_tick()
                 if len(self.game.logs) != last_log_len:
                     self._refresh_log()
                     last_log_len = len(self.game.logs)
@@ -1067,10 +1080,9 @@ class HeroWorkshopApp:
                         icon_display = f"🌟{pd['icon']}" if is_mutated else pd['icon']
 
                         if status_info["adult"]:
-                            status = "\U0001f7e2 可收获"
+                            status = f"\U0001f7e2 {status_info['progress']}"
                             color = Cs("GREEN_600")
-                            btn = ft.Button("收获", scale=0.8,
-                                          on_click=lambda e, p=plant: self._harvest_plant(p))
+                            btn = ft.Text("自动产金中", size=11, color=Cs("GREEN_600"))
                         else:
                             status = f"{status_info['progress']}"
                             color = Cs("ORANGE_600")
@@ -1375,10 +1387,6 @@ class HeroWorkshopApp:
         ok, msg = self.game.plant_seed(pd["id"], cost_gold=pd["seed_price"])
         self.game.add_log(msg)
 
-    def _harvest_plant(self, plant):
-        ok, msg = self.game.harvest_plant(plant["id"])
-        self.game.add_log(msg)
-
     def _speedup(self, plant):
         ok, msg = self.game.speedup_plant(plant["id"])
         self.game.add_log(msg)
@@ -1495,20 +1503,33 @@ class HeroWorkshopApp:
             # 进度
             progress_txt = ft.Text(f"已发现 {discovered}/{total}", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER_700)
             # 条目网格
-            grid = ft.GridView(child_aspect_ratio=2.5, spacing=4, padding=4, expand=True)
+            is_icon_grid = kind in ("ranch", "plants")
+            grid = ft.GridView(max_extent=60 if is_icon_grid else 150, child_aspect_ratio=1.2 if is_icon_grid else 2.5, spacing=4, padding=4, expand=True, run_spacing=4)
             if entries:
                 for entry in entries:
                     rc = PLANT_RARITY_COLORS.get(entry.get("rarity", 0), "#888888")
-                    grid.controls.append(ft.Container(
-                        content=ft.Column([
-                            ft.Text(entry["icon"], size=20, text_align="center"),
-                            ft.Text(entry["name"], size=10, color=rc, weight=ft.FontWeight.W_500, text_align="center", max_lines=1, overflow="ellipsis"),
-                        ], alignment=ft.MainAxisAlignment.CENTER, spacing=2, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                        border=ft.Border.all(1, rc),
-                        border_radius=6,
-                        padding=4,
-                        bgcolor="#fafafa",
-                    ))
+                    if is_icon_grid:
+                        grid.controls.append(ft.Container(
+                            content=ft.Column([
+                                ft.Text(entry["icon"], size=22, text_align="center"),
+                                ft.Text(entry["name"], size=8, color=rc, weight=ft.FontWeight.W_500, text_align="center", max_lines=1, overflow="ellipsis"),
+                            ], alignment=ft.MainAxisAlignment.CENTER, spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                            border=ft.Border.all(1, rc),
+                            border_radius=6,
+                            padding=ft.padding.symmetric(horizontal=4, vertical=3),
+                            bgcolor="#fafafa",
+                        ))
+                    else:
+                        grid.controls.append(ft.Container(
+                            content=ft.Column([
+                                ft.Text(entry["icon"], size=20, text_align="center"),
+                                ft.Text(entry["name"], size=10, color=rc, weight=ft.FontWeight.W_500, text_align="center", max_lines=1, overflow="ellipsis"),
+                            ], alignment=ft.MainAxisAlignment.CENTER, spacing=2, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                            border=ft.Border.all(1, rc),
+                            border_radius=6,
+                            padding=4,
+                            bgcolor="#fafafa",
+                        ))
             else:
                 grid.controls.append(ft.Container(
                     content=ft.Text("尚未发现任何条目", size=12, color=ft.Colors.GREY_500, text_align="center"),

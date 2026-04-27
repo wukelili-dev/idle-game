@@ -268,48 +268,6 @@ class GameCore:
             "desc": pd["desc"],
         }
 
-    def harvest_plant(self, plant_id):
-        """手动收割植物（仅成年可收割）"""
-        plant = None
-        for p in self.plants:
-            if p["id"] == plant_id:
-                plant = p
-                break
-        if not plant:
-            return False, "植物不存在"
-
-        pd = get_plant_by_id(plant["plant_id"])
-        elapsed = time.time() - plant["planted_at"]
-        stage = calc_grow_stage(elapsed, pd["grow_time_s"])
-
-        if stage < 3:
-            return False, "植物尚未成年，无法收割"
-
-        # 计算本次收割收益
-        adult_elapsed = elapsed - pd["grow_time_s"]
-        interval = pd["harvest_interval_s"]
-        prev_harvests = plant.get("harvest_count", 0)
-        current_harvests = int(adult_elapsed // interval)
-
-        gain = (current_harvests + 1 - prev_harvests) * pd["harvest_gold"]
-
-        # 变异机制：5%概率触发，产出翻倍
-        if random.random() < MUTATION_CHANCE:
-            gain *= 2
-            self.mutated_plants[plant["id"]] = {
-                "plant_id": plant["plant_id"],
-                "mutated": True,
-                "icon": pd["icon"]
-            }
-            # 图鉴：发现变异植物
-            if pd:
-                self.codex.discover("plants", "mutated_" + plant["plant_id"], "🌟" + pd["name"], "🌟", "变异·" + pd["desc"], pd["rarity"], "变异")
-
-        self.player.gold += gain
-        plant["harvest_count"] = current_harvests + 1
-        self.add_log(f"🌾 收割了 {pd['icon']} {pd['name']} 获得 {gain}G")
-        return True, f"收割成功! +{gain}G"
-
     # ═══════════════════ 工厂系统 ═══════════════════
 
     def _start_factory_system(self):
