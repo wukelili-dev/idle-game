@@ -17,9 +17,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from modules.game_core import GameCore
 from modules.equipment import WEAPONS, ARMORS
 from modules.buildings import get_all_building_names, get_wonder_names, BUILDING_CONFIGS
-from modules.maps import get_all_maps, get_random_enemy
+from modules.maps import get_all_maps, get_random_enemy, get_all_enemies
 from modules.inventory import NOVELTY_ITEMS, NOVELTY_RARITY_COLORS, NOVELTY_RARITY_NAMES
 from modules.plants import get_plant_catalog, get_plant_by_id, PLANT_RARITY_COLORS, PLANT_RARITY_NAMES
+from modules.ranch import RANCH_CATALOG
 from modules.tavern import generate_tavern_roster
 from modules.factory import DEPARTMENTS as FACTORY_DEPTS, FACTORY_BUILD_COST, calc_factory_bonus as calc_fb, FACTORY_BASE_PROFIT, FACTORY_BASE_INTERVAL_S
 from modules.codex import CODEX_BOOKS
@@ -27,6 +28,11 @@ from modules.codex import CODEX_BOOKS
 SAVE_PATH = "D:\\pyproject\\hero_workshop\\save.json"
 I = ft.icons.Icons  # Flet 0.84: icons are at ft.icons.Icons.XXX
 RARITY_COLORS = ["#cccccc", "#4FC3F7", "#BA68C8", "#FFA726", "#EF5350"]
+RANCH_RARITY_COLORS = {1: "#4caf50", 2: "#2196f3", 3: "#9c27b0", 4: "#ff9800", 5: "#f44336"}
+MONSTER_RARITY_COLORS = {1: "#4caf50", 2: "#2196f3", 3: "#9c27b0", 4: "#ff9800", 5: "#f44336"}
+
+RANCH_RARITY_COLORS = {1: "#4caf50", 2: "#2196f3", 3: "#9c27b0", 4: "#ff9800", 5: "#f44336"}
+MONSTER_RARITY_COLORS = {1: "#4caf50", 2: "#2196f3", 3: "#9c27b0", 4: "#ff9800", 5: "#f44336"}
 
 
 def Cs(name):
@@ -488,6 +494,7 @@ class HeroWorkshopApp:
                 ft.Tab(label="\U0001f37a 酒馆"),
                 ft.Tab(label="\U0001f331 农场"),
                 ft.Tab(label="\U0001f3ed 工厂"),
+                ft.Tab(label="\U0001f43e 牧场"),
             ],
         )
         self._tab_contents = [
@@ -499,11 +506,12 @@ class HeroWorkshopApp:
             self._build_tavern_tab(),
             self._build_farm_tab(),
             self._build_factory_tab(),
+            self._build_ranch_tab(),
         ]
         self._tab_view = ft.TabBarView(controls=self._tab_contents, expand=True)
         self.right_tabs = ft.Tabs(
             content=ft.Column([self._tab_bar, self._tab_view], spacing=0, expand=True),
-            length=8,
+            length=9,
             expand=True,
         )
         return self._ref("right_panel_ref", ft.Container(content=self.right_tabs, width=self._right_width, expand=True, padding=4))
@@ -781,6 +789,76 @@ class HeroWorkshopApp:
             ft.Container(content=self._refs["farm_seeds_ctr"],
                          border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
                          border_radius=4, padding=4, expand=True),
+        ], scroll="auto", spacing=4)
+        return ft.Container(content=ctr, padding=6)
+
+    def _build_ranch_tab(self):
+        """牧场Tab: 商店区 / 牧场库存 / 产出仓库"""
+        # 商店区
+        shop_ctr = ft.Column([
+            ft.Text("🐾 生物商店", size=13, weight=ft.FontWeight.BOLD),
+            ft.Divider(height=1),
+        ], spacing=2)
+        self._ref("ranch_shop_ctr", shop_ctr)
+        for creature in RANCH_CATALOG:
+            ridx = min(creature.get("rarity", 1) - 1, 4)
+            rcolor = RANCH_RARITY_COLORS.get(creature.get("rarity", 1), "#888888")
+            price = creature.get("price", 0)
+            feed = creature.get("feed_cost", 0)
+            pers = creature.get("personality", "")
+            text = (f"{creature.get('icon','?')} {creature.get('name','?')}  "
+                    f"[{rcolor}]{creature.get('rarity_name','')}[/{rcolor}]"
+                    f" {price}G  饲料{feed}G/次  {pers}")
+            shop_ctr.controls.append(
+                ft.ListTile(
+                    title=ft.Text(f"{creature.get('icon','?')} {creature.get('name','?')}",
+                                  size=12, color=rcolor, weight=ft.FontWeight.BOLD),
+                    subtitle=ft.Text(f"{creature.get('rarity_name','')} · 售价{price}G · 饲料{feed}G/次 · {pers}",
+                                    size=10),
+                    trailing=ft.Button("购买", scale=0.75,
+                                       on_click=lambda e, c=creature: self.game.buy_ranch_creature(c["id"])),
+                )
+            )
+
+        # 牧场库存
+        self._ref("ranch_inventory_ctr", ft.Column([], spacing=4, scroll="auto"))
+        self._ref("ranch_inventory_lbl", ft.Text("🐄 牧场库存: 0", size=13, weight=ft.FontWeight.BOLD))
+
+        # 产出仓库
+        self._ref("ranch_warehouse_ctr", ft.Column([], spacing=4, scroll="auto"))
+        self._ref("ranch_warehouse_lbl", ft.Text("📦 产出仓库", size=13, weight=ft.FontWeight.BOLD))
+
+        ctr = ft.Column([
+            # 标题+金币
+            ft.Container(
+                content=ft.Row([
+                    self._refs["ranch_inventory_lbl"],
+                    ft.Container(expand=True),
+                    self._ref("ranch_gold_lbl", ft.Text("💰 100G", size=13, color=ft.Colors.AMBER_700)),
+                ], spacing=8),
+                padding=ft.Padding.only(bottom=4),
+            ),
+            # 库存区
+            ft.Container(
+                content=self._refs["ranch_inventory_ctr"],
+                border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
+                border_radius=4, padding=4, height=200,
+            ),
+            ft.Divider(),
+            # 仓库区
+            self._refs["ranch_warehouse_lbl"],
+            ft.Container(
+                content=self._refs["ranch_warehouse_ctr"],
+                border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
+                border_radius=4, padding=4, expand=True,
+            ),
+            ft.Divider(),
+            # 商店区
+            ft.Container(
+                content=ft.ListView([shop_ctr], spacing=2, expand=True),
+                border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
+                border_radius=4, padding=4, height=220,
+            ),
         ], scroll="auto", spacing=4)
         return ft.Container(content=ctr, padding=6)
 
@@ -1094,6 +1172,42 @@ class HeroWorkshopApp:
                     ], spacing=4, alignment=ft.alignment.Alignment(-1, 0)),
                     padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4,
                     bgcolor="#fff8e1" if i == g.current_member_idx else None))
+
+        # 刷新牧场
+        inv_ctr = self._refs.get("ranch_inventory_ctr")
+        if inv_ctr:
+            inv_ctr.controls.clear()
+            inv_summary = g.ranch.get_inventory_summary()
+            for item in inv_summary:
+                inv_ctr.controls.append(ft.Container(
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Text(item["name"], size=12, weight=ft.FontWeight.BOLD, expand=True),
+                            ft.Text(item["status"], size=10, color=Cs("ORANGE_600")),
+                        ], tight=True),
+                        ft.Button("🍖 饲养", scale=0.7, on_click=lambda e, idx=item["index"]: self.game.feed_ranch_creature(idx)),
+                    ], spacing=2),
+                    padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4,
+                ))
+        inv_lbl = self._refs.get("ranch_inventory_lbl")
+        if inv_lbl:
+            inv_lbl.value = f"\U0001f42c 牧场库存: {len(g.ranch.ranch_inventory)}"
+        rg_lbl = self._refs.get("ranch_gold_lbl")
+        if rg_lbl:
+            rg_lbl.value = f"\U0001fa99 {g.player.gold}"
+        wh_ctr = self._refs.get("ranch_warehouse_ctr")
+        if wh_ctr:
+            wh_ctr.controls.clear()
+            wh = g.ranch.get_warehouse_summary()
+            for otype, count in wh.items():
+                if count > 0:
+                    wh_ctr.controls.append(ft.Container(
+                        content=ft.Row([
+                            ft.Text(f"{otype} x{count}", size=12, expand=True),
+                            ft.Button("售出", scale=0.7, on_click=lambda e, ot=otype: self.game.sell_ranch_output(ot, 1)),
+                        ], tight=True),
+                        padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4,
+                    ))
 
         # 刷新背包和材料(修复战斗掉落后UI不同步)
         self._refresh_bag()

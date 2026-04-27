@@ -1252,13 +1252,10 @@ class GameCore:
         creature = get_creature_by_id(creature_id)
         if not creature:
             return False, f"未知生物: {creature_id}"
-        if self.player.gold < creature["price"]:
-            return False, f"金币不足! 需要 {creature['price']}G"
-        self.player.gold -= creature["price"]
-        ok, msg = self.ranch.buy_creature(creature_id)
+        ok, msg, new_gold = self.ranch.buy_creature(creature_id, self.player.gold)
         if not ok:
-            self.player.gold += creature["price"]  # 回滚
             return False, msg
+        self.player.gold = new_gold
         self.add_log(f"🏠 购入 {creature['icon']} {creature['name']}!")
         # 图鉴发现
         self.codex.discover("ranch", creature_id, creature["name"], creature["icon"],
