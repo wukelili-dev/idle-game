@@ -1271,13 +1271,10 @@ class GameCore:
         creature = get_creature_by_id(instance["creature_id"])
         if not creature:
             return False, "数据异常"
-        if self.player.gold < creature["feed_cost"]:
-            return False, f"金币不足! 需要 {creature['feed_cost']}G"
-        self.player.gold -= creature["feed_cost"]
-        ok, msg = self.ranch.feed_creature(index)
+        ok, msg, new_gold = self.ranch.feed_creature(index, self.player.gold)
         if not ok:
-            self.player.gold += creature["feed_cost"]
             return False, msg
+        self.player.gold = new_gold
         self.add_log(f"🦴 饲养了 {creature['icon']} {creature['name']} (消耗 {creature['feed_cost']}G)")
         return True, f"{creature['icon']} {creature['name']} 开始产出!"
 
