@@ -22,6 +22,7 @@ from modules.inventory import NOVELTY_ITEMS, NOVELTY_RARITY_COLORS, NOVELTY_RARI
 from modules.plants import get_plant_catalog, get_plant_by_id, PLANT_RARITY_COLORS, PLANT_RARITY_NAMES
 from modules.tavern import generate_tavern_roster
 from modules.factory import DEPARTMENTS as FACTORY_DEPTS, FACTORY_BUILD_COST, calc_factory_bonus as calc_fb, FACTORY_BASE_PROFIT, FACTORY_BASE_INTERVAL_S
+from modules.codex import CODEX_BOOKS
 
 SAVE_PATH = "D:\\pyproject\\hero_workshop\\save.json"
 I = ft.icons.Icons  # Flet 0.84: icons are at ft.icons.Icons.XXX
@@ -841,6 +842,7 @@ class HeroWorkshopApp:
                 ft.Container(expand=True),
                 ft.Button("\U0001f4be 存档", on_click=self._save),
                 ft.Button("\U0001f4c2 读档", on_click=self._load),
+                ft.Button("📖 图鉴", on_click=self._show_codex),
                 ft.Button("❓ 帮助", on_click=self._show_help),
                 ft.Container(expand=True),
             ], spacing=8),
@@ -982,6 +984,10 @@ class HeroWorkshopApp:
                 if pd:
                     status_info = self.game.get_plant_status(plant["id"])
                     if status_info:
+                        # 变异植物显示 🌟 前缀
+                        is_mutated = plant["id"] in self.game.mutated_plants
+                        icon_display = f"🌟{pd['icon']}" if is_mutated else pd['icon']
+
                         if status_info["adult"]:
                             status = "\U0001f7e2 可收获"
                             color = Cs("GREEN_600")
@@ -1000,7 +1006,7 @@ class HeroWorkshopApp:
                             ft.Container(
                                 content=ft.Column([
                                     ft.Row([
-                                        ft.Text(f"{pd['icon']} {pd['name']}", size=12, weight=ft.FontWeight.BOLD, expand=True),
+                                        ft.Text(f"{icon_display} {pd['name']}", size=12, weight=ft.FontWeight.BOLD, expand=True),
                                         ft.Text(status, size=11, color=color)
                                     ], tight=True),
                                     ft.Container(content=btn, alignment=ft.alignment.Alignment(0.5, 0.5))
@@ -1320,7 +1326,10 @@ class HeroWorkshopApp:
             "auto_potion_threshold": self.game.auto_potion_threshold,
             "team": self.game.team_to_dict(),
             "tavern": self.game.tavern_to_dict(),
+            "codex": self.game.codex.to_dict(),
+            "ranch": self.game.ranch.to_dict(),
             "current_member_idx": self.game.current_member_idx,
+            "mutated_plants": self.game.mutated_plants,
         }
         with open(SAVE_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -1351,12 +1360,65 @@ class HeroWorkshopApp:
         self.game.auto_potion_threshold = data.get("auto_potion_threshold", 0)
         self.game.team_from_dict(data.get("team", []))
         self.game.tavern_from_dict(data.get("tavern", []))
+        self.game.codex.from_dict(data.get("codex", {}))
+        self.game.ranch.from_dict(data.get("ranch", {}))
         self.game.current_member_idx = data.get("current_member_idx", 0)
+        self.game.mutated_plants = data.get("mutated_plants", {})
         for name, levels in self.game.building_levels.items():
             for idx in range(len(levels)):
                 self.game.start_building_production(name, idx)
         self.game.add_log("\U0001f4c2 读档成功!")
         self._show_toast("读档成功!")
+
+    def _show_codex(self, e=None):
+        """图鉴弹窗 - 5个分册tab"""
+        tabs = []
+        tab_contents = []
+        for kind, book in CODEX_BOOKS.items():
+            tabs.append(ft.Tab(label=book["name"]))
+            discovered, total = self.game.codex.get_progress(kind)
+            entries = self.game.codex.get_all_by_kind(kind)
+            # 进度
+            progress_txt = ft.Text(f"已发现 {discovered}/{total}", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER_700)
+            # 条目网格
+            grid = ft.GridView(child_aspect_ratio=2.5, spacing=4, padding=4, expand=True)
+            if entries:
+                for entry in entries:
+                    rc = PLANT_RARITY_COLORS.get(entry.get("rarity", 0), "#888888")
+                    grid.controls.append(ft.Container(
+                        content=ft.Column([
+                            ft.Text(entry["icon"], size=20, text_align="center"),
+                            ft.Text(entry["name"], size=10, color=rc, weight=ft.FontWeight.W_500, text_align="center", max_lines=1, overflow="ellipsis"),
+                        ], alignment=ft.MainAxisAlignment.CENTER, spacing=2, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        border=ft.Border.all(1, rc),
+                        border_radius=6,
+                        padding=4,
+                        bgcolor="#fafafa",
+                    ))
+            else:
+                grid.controls.append(ft.Container(
+                    content=ft.Text("尚未发现任何条目", size=12, color=ft.Colors.GREY_500, text_align="center"),
+                    alignment=ft.alignment.Alignment(0.5, 0.5),
+                ))
+            tab_contents.append(ft.Column([
+                ft.Container(content=progress_txt, padding=ft.Padding.only(bottom=6)),
+                grid,
+            ], spacing=4, expand=True))
+
+        tab_bar = ft.TabBar(tabs=tabs)
+        tab_view = ft.TabBarView(controls=tab_contents, expand=True)
+        codex_tabs = ft.Tabs(
+            content=ft.Column([tab_bar, tab_view], spacing=0, expand=True),
+            length=len(tabs),
+            expand=True,
+        )
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("📖 图鉴", size=16, weight=ft.FontWeight.BOLD),
+            content=ft.Container(content=codex_tabs, width=500, height=450),
+            actions=[ft.TextButton("关闭", on_click=lambda e: self.page.pop_dialog())],
+        )
+        self.page.show_dialog(dlg)
 
     def _show_help(self, e=None):
         self.page.dialog = ft.AlertDialog(

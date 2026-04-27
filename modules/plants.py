@@ -2,6 +2,9 @@
 植物模块 - 植物种子目录与生长系统
 rarity: 0普通(5G) 1少见(10G) 2稀有(15G) 3珍藏(20G) 4传说(25G)
 """
+import time
+
+MUTATION_CHANCE = 0.05  # 5%变异概率
 
 PLANTS_CATALOG = [
     # ── 普通 5G ──
@@ -38,6 +41,32 @@ PLANTS_CATALOG = [
     {"id": "eternalrose", "name": "🌹 永恒玫瑰",     "desc": "永不凋谢，正午释放时停领域","rarity": 4, "seed_price": 25, "grow_time_s": 1500,"adult_lifespan_s": 5400, "harvest_gold": 100,"harvest_interval_s": 200,"icon": "🌹"},
     {"id": "clockflower",  "name": "⏰ 时计花",       "desc": "花朵呈钟表状，正午时间静止","rarity": 4, "seed_price": 25, "grow_time_s": 1800,"adult_lifespan_s": 7200, "harvest_gold": 120,"harvest_interval_s": 240,"icon": "⏰"},
     {"id": "worldtree",   "name": "🌲 世界树之苗",   "desc": "九界之树，树冠下作物加速",  "rarity": 4, "seed_price": 25, "grow_time_s": 2400,"adult_lifespan_s": 10800,"harvest_gold": 150,"harvest_interval_s": 300,"icon": "🌲"},
+
+    # ── P0-B1 新增 ──
+    # ── 普通 5G ──
+    {"id": "gold_grass",   "name": "🌾 金穗草",      "desc": "麦穗在阳光下闪着金光",      "rarity": 0, "seed_price": 5,  "grow_time_s": 65,  "adult_lifespan_s": 310,  "harvest_gold": 3,  "harvest_interval_s": 28, "icon": "🌾"},
+    {"id": "sunflower",    "name": "🌻 向日葵",      "desc": "永远朝着太阳的方向",        "rarity": 0, "seed_price": 5,  "grow_time_s": 85,  "adult_lifespan_s": 380,  "harvest_gold": 4, "harvest_interval_s": 32, "icon": "🌻"},
+    {"id": "mint",         "name": "🌿 薄荷",        "desc": "清凉的香气沁人心脾",        "rarity": 0, "seed_price": 5,  "grow_time_s": 70,  "adult_lifespan_s": 330,  "harvest_gold": 2,  "harvest_interval_s": 26, "icon": "🌿"},
+
+    # ── 少见 10G ──
+    {"id": "fire_flower",  "name": "🌺 火焰花",      "desc": "花瓣尖端燃烧着不灭的火焰",  "rarity": 1, "seed_price": 10, "grow_time_s": 170,  "adult_lifespan_s": 780,  "harvest_gold": 9, "harvest_interval_s": 60, "icon": "🌺"},
+    {"id": "thorn_vine",   "name": "🥀 荆棘藤",      "desc": "藤蔓上长满尖锐的刺",        "rarity": 1, "seed_price": 10, "grow_time_s": 150,  "adult_lifespan_s": 650,  "harvest_gold": 7, "harvest_interval_s": 50, "icon": "🥀"},
+    {"id": "silver_leaf",  "name": "🍃 银叶草",      "desc": "叶片泛着金属光泽",          "rarity": 1, "seed_price": 10, "grow_time_s": 130,  "adult_lifespan_s": 580,  "harvest_gold": 6, "harvest_interval_s": 48, "icon": "🍃"},
+
+    # ── 稀有 15G ──
+    {"id": "shadow_orchid","name": "🌸 暗影兰",      "desc": "只在月光下绽放的神秘兰花",  "rarity": 2, "seed_price": 15, "grow_time_s": 340, "adult_lifespan_s": 1360,  "harvest_gold": 18, "harvest_interval_s": 100, "icon": "🌸"},
+    {"id": "desert_cactus","name": "🌵 沙漠仙人掌",  "desc": "能在极端环境中存储生命之水",  "rarity": 2, "seed_price": 15, "grow_time_s": 390, "adult_lifespan_s": 1550,  "harvest_gold": 21, "harvest_interval_s": 115, "icon": "🌵"},
+    {"id": "crystal_kelp", "name": "🌊 水晶海藻",    "desc": "半透明的海藻折射七彩光芒",  "rarity": 2, "seed_price": 15, "grow_time_s": 310, "adult_lifespan_s": 1250,  "harvest_gold": 16, "harvest_interval_s": 92, "icon": "🌊"},
+
+    # ── 珍藏 20G ──
+    {"id": "life_fruit_tree","name": "🍎 生命果实树", "desc": "传说食其果可延年益寿",      "rarity": 3, "seed_price": 20, "grow_time_s": 780, "adult_lifespan_s": 3100, "harvest_gold": 45,  "harvest_interval_s": 145, "icon": "🍎"},
+    {"id": "star_grass",   "name": "🌟 星辰草",      "desc": "每片叶子都像一颗星星",      "rarity": 3, "seed_price": 20, "grow_time_s": 660, "adult_lifespan_s": 2600,  "harvest_gold": 38,  "harvest_interval_s": 130, "icon": "🌟"},
+    {"id": "eternal_pumpkin","name":"🎃 永恒南瓜",   "desc": "永远不会腐烂的神奇南瓜",    "rarity": 3, "seed_price": 20, "grow_time_s": 920, "adult_lifespan_s": 3600, "harvest_gold": 52, "harvest_interval_s": 170, "icon": "🎃"},
+
+    # ── 传说 25G ──
+    {"id": "world_flower", "name": "🌐 世界花",      "desc": "花蕊中能看到整个世界的缩影",  "rarity": 4, "seed_price": 25, "grow_time_s": 1800, "adult_lifespan_s": 7200, "harvest_gold": 130, "harvest_interval_s": 250,"icon": "🌐"},
+    {"id": "genesis_crystal","name":"💎 创世晶花",   "desc": "据说世界诞生时开的第一朵花",  "rarity": 4, "seed_price": 25, "grow_time_s": 2100, "adult_lifespan_s": 9000, "harvest_gold": 145, "harvest_interval_s": 280,"icon": "💎"},
+    {"id": "void_bloom",   "name": "🌀 虚空之花",    "desc": "来自虚空的奇异花朵",        "rarity": 4, "seed_price": 25, "grow_time_s": 1600, "adult_lifespan_s": 6000, "harvest_gold": 110, "harvest_interval_s": 220,"icon": "🌀"},
 ]
 
 PLANT_RARITY_COLORS = {

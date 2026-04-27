@@ -11,12 +11,14 @@ from .maps import get_map_enemies, get_all_maps, can_enter_map, get_unlock_cost,
 from .equipment_drops import generate_drop, get_drop_summary
 from .inventory import NOVELTY_ITEMS
 from .plants import (get_plant_catalog, get_plant_by_id, calc_grow_stage,
-                     STAGE_NAMES, STAGE_ICONS, MAX_PLANTS)
+                     STAGE_NAMES, STAGE_ICONS, MAX_PLANTS, MUTATION_CHANCE)
 from .tavern import (generate_tavern_roster, tavern_roster_to_dict, tavern_roster_from_dict)
 from .factory import (FACTORY_BUILD_COST, FACTORY_BASE_INTERVAL_S,
                       FACTORY_BASE_PROFIT, DEPARTMENTS, MAX_FACTORY_WORKERS,
                       FACTORY_WORKER_COST_GOLD, get_dept_by_id,
                       calc_factory_bonus)
+from .codex import CodexManager
+from .ranch_manager import RanchManager, get_creature_by_id, RARITY_PRICE
 
 
 # ═══════════════ 伤害公式常量 ═══════════════
@@ -69,6 +71,7 @@ class GameCore:
         # ── 农场系统 ──
         self.plants = []      # [{id, plant_id, planted_at, speedups}]
         self.plant_thread = None
+        self.mutated_plants = {}  # 变异记录
         self._start_plant_system()
 
         # ── 工厂系统 ──
@@ -78,6 +81,12 @@ class GameCore:
         self.factory_last_profit_time = 0  # 上次结算时间戳
         self.factory_thread = None
         self._start_factory_system()
+
+        # ── 图鉴系统 ──
+        self.codex = CodexManager()
+
+        # ── 牧场系统 ──
+        self.ranch = RanchManager()
 
     def _start_wage_system(self):
         """启动工资支付系统"""
@@ -184,6 +193,9 @@ class GameCore:
         }
         self.plants.append(plant)
         self.add_log(f"🌱 种下了 {pd['icon']} {pd['name']}")
+        # 图鉴：发现植物
+        if pd:
+            self.codex.discover("plants", plant_id, pd["name"], pd["icon"], pd["desc"], pd["rarity"], "种植")
         return True, f"已种植 {pd['name']}"
 
     def speedup_plant(self, plant_id):
@@ -280,6 +292,19 @@ class GameCore:
         current_harvests = int(adult_elapsed // interval)
 
         gain = (current_harvests + 1 - prev_harvests) * pd["harvest_gold"]
+
+        # 变异机制：5%概率触发，产出翻倍
+        if random.random() < MUTATION_CHANCE:
+            gain *= 2
+            self.mutated_plants[plant["id"]] = {
+                "plant_id": plant["plant_id"],
+                "mutated": True,
+                "icon": pd["icon"]
+            }
+            # 图鉴：发现变异植物
+            if pd:
+                self.codex.discover("plants", "mutated_" + plant["plant_id"], "🌟" + pd["name"], "🌟", "变异·" + pd["desc"], pd["rarity"], "变异")
+
         self.player.gold += gain
         plant["harvest_count"] = current_harvests + 1
         self.add_log(f"🌾 收割了 {pd['icon']} {pd['name']} 获得 {gain}G")
@@ -1159,6 +1184,15 @@ class GameCore:
             next_enemy, next_is_boss = get_random_enemy(self.current_map)
             self.current_enemy = next_enemy
             self.current_enemy_is_boss = next_is_boss
+            # 图鉴：发现怪物
+            if self.current_enemy:
+                ename = self.current_enemy.get("name", "")
+                eicon = self.current_enemy.get("icon", "👾")
+                edesc = self.current_enemy.get("desc", "")
+                erarity = self.current_enemy.get("rarity", 0)
+                eid = self.current_enemy.get("id", ename)
+                if eid:
+                    self.codex.discover("monsters", eid, ename, eicon, edesc, erarity, "战斗")
             return True, 'Victory'
         else:
             for m in self.team:
@@ -1171,6 +1205,15 @@ class GameCore:
             next_enemy, next_is_boss = get_random_enemy(self.current_map)
             self.current_enemy = next_enemy
             self.current_enemy_is_boss = next_is_boss
+            # 图鉴：发现怪物
+            if self.current_enemy:
+                ename = self.current_enemy.get("name", "")
+                eicon = self.current_enemy.get("icon", "👾")
+                edesc = self.current_enemy.get("desc", "")
+                erarity = self.current_enemy.get("rarity", 0)
+                eid = self.current_enemy.get("id", ename)
+                if eid:
+                    self.codex.discover("monsters", eid, ename, eicon, edesc, erarity, "战斗")
             return False, 'Defeat'
 
     # ═══════════════════ 存档扩展 ═══════════════════
@@ -1203,6 +1246,68 @@ class GameCore:
             'roster': tavern_roster_to_dict(self.tavern_roster),
             'last_refresh': self.tavern_last_refresh,
         }
+
+    def buy_ranch_creature(self, creature_id: str):
+        """购买牧场生物"""
+        creature = get_creature_by_id(creature_id)
+        if not creature:
+            return False, f"未知生物: {creature_id}"
+        if self.player.gold < creature["price"]:
+            return False, f"金币不足! 需要 {creature['price']}G"
+        self.player.gold -= creature["price"]
+        ok, msg = self.ranch.buy_creature(creature_id)
+        if not ok:
+            self.player.gold += creature["price"]  # 回滚
+            return False, msg
+        self.add_log(f"🏠 购入 {creature['icon']} {creature['name']}!")
+        # 图鉴发现
+        self.codex.discover("ranch", creature_id, creature["name"], creature["icon"],
+                           creature["desc"], creature["rarity"], "购买")
+        return True, f"购入 {creature['icon']} {creature['name']}!"
+
+    def feed_ranch_creature(self, index: int):
+        """饲养牧场生物"""
+        instances = self.ranch.ranch_inventory
+        if index < 0 or index >= len(instances):
+            return False, "生物不存在"
+        instance = instances[index]
+        creature = get_creature_by_id(instance["creature_id"])
+        if not creature:
+            return False, "数据异常"
+        if self.player.gold < creature["feed_cost"]:
+            return False, f"金币不足! 需要 {creature['feed_cost']}G"
+        self.player.gold -= creature["feed_cost"]
+        ok, msg = self.ranch.feed_creature(index)
+        if not ok:
+            self.player.gold += creature["feed_cost"]
+            return False, msg
+        self.add_log(f"🦴 饲养了 {creature['icon']} {creature['name']} (消耗 {creature['feed_cost']}G)")
+        return True, f"{creature['icon']} {creature['name']} 开始产出!"
+
+    def harvest_ranch_creature(self, index: int):
+        """收获牧场生物产出"""
+        result = self.ranch.harvest_creature(index)
+        if not result:
+            return False, "还未到产出时间!"
+        self.add_log(f"📦 {result['creature_icon']} {result['creature_name']} 产出 "
+                     f"{result['count']}×{result['output_type']} "
+                     f"({result['personality']}+{int((result['bonus']-1)*100)}%)")
+        return True, f"获得 {result['count']}×{result['output_type']}!"
+
+    def sell_ranch_output(self, output_type: str, count: int):
+        """卖出牧场产出物"""
+        old_gold = self.player.gold
+        ok, msg, new_gold = self.ranch.sell_output(output_type, count, old_gold)
+        if not ok:
+            return False, msg
+        self.player.gold = new_gold
+        gain = new_gold - old_gold
+        self.add_log(f"💰 卖出 {count}×{output_type}! +{gain}G")
+        return True, f"卖出成功! +{gain}G"
+
+    def ranch_tick(self):
+        """牧场产出Tick（可由主循环调用或独立线程）"""
+        return self.ranch.check_outputs()
 
     def tavern_from_dict(self, data):
         """酒馆状态反序列化"""
