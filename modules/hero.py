@@ -69,30 +69,87 @@ class Hero:
         """计算升到下一级所需经验"""
         return 50 * self.level + 10 * self.level ** 2
 
+    def _get_fortify_mult(self, equip):
+        """获取装备的强化倍率"""
+        if not equip or not isinstance(equip, dict):
+            return 1.0
+        from .forge import get_fortify_bonus
+        return get_fortify_bonus(equip.get("forge_level", 0))
+
+    def _collect_passives(self):
+        """收集武器和护甲的所有被动效果列表"""
+        passives = []
+        for slot in [self.weapon, self.armor]:
+            if slot and isinstance(slot, dict):
+                p = slot.get("passive")
+                if p and isinstance(p, dict):
+                    passives.append(p)
+        return passives
+
+    def get_passive_atk_pct(self):
+        """被动: 攻击力加成百分比"""
+        total = 0
+        for p in self._collect_passives():
+            total += p.get("atk_pct", 0)
+            total += p.get("all_stats_pct", 0)
+        return total
+
+    def get_passive_def_pct(self):
+        """被动: 防御力加成百分比"""
+        total = 0
+        for p in self._collect_passives():
+            total += p.get("def_pct", 0)
+            total += p.get("all_stats_pct", 0)
+        return total
+
+    def get_passive_hp_pct(self):
+        """被动: HP加成百分比"""
+        total = 0
+        for p in self._collect_passives():
+            total += p.get("hp_pct", 0)
+            total += p.get("all_stats_pct", 0)
+        return total
+
     def get_total_attack(self):
-        """获取总攻击力（基础+武器）"""
+        """获取总攻击力（基础+武器×强化倍率）×被动加成"""
+        base = self.attack
         if self.weapon and isinstance(self.weapon, dict):
-            return self.attack + self.weapon.get("attack", 0)
-        return self.attack
+            mult = self._get_fortify_mult(self.weapon)
+            base += int(self.weapon.get("attack", 0) * mult)
+        pct = self.get_passive_atk_pct()
+        if pct:
+            base = int(base * (1 + pct / 100))
+        return base
 
     def get_crit_rate(self):
-        """获取暴击率"""
+        """获取暴击率（含强化倍率）"""
         if self.weapon and isinstance(self.weapon, dict):
-            return self.weapon.get("crit_rate", 0)
+            mult = self._get_fortify_mult(self.weapon)
+            return int(self.weapon.get("crit_rate", 0) * mult)
         return 0
 
     def get_total_defense(self):
-        """获取总防御力（基础+护甲）"""
+        """获取总防御力（基础+护甲×强化倍率）×被动加成"""
+        base = self.defense
         if self.armor and isinstance(self.armor, dict):
-            return self.defense + self.armor.get("defense", 0)
-        return self.defense
+            mult = self._get_fortify_mult(self.armor)
+            base += int(self.armor.get("defense", 0) * mult)
+        pct = self.get_passive_def_pct()
+        if pct:
+            base = int(base * (1 + pct / 100))
+        return base
 
     def get_max_hp_with_bonus(self):
-        """获取最大生命值（基础+护甲加成）"""
+        """获取最大生命值（基础+护甲加成×强化倍率）×被动加成"""
         bonus = 0
         if self.armor and isinstance(self.armor, dict):
-            bonus = self.armor.get("hp_bonus", 0)
-        return self.max_hp + bonus
+            mult = self._get_fortify_mult(self.armor)
+            bonus = int(self.armor.get("hp_bonus", 0) * mult)
+        base = self.max_hp + bonus
+        pct = self.get_passive_hp_pct()
+        if pct:
+            base = int(base * (1 + pct / 100))
+        return base
 
     def take_damage(self, damage):
         """受到伤害，血量不会降到负数"""

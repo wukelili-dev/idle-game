@@ -137,8 +137,12 @@ def generate_weapon(level, rarity="普通", is_perfect=False, is_boss=False):
         "special": None,
         "level_req": 0 if is_perfect else max(1, level - 2),
         "is_perfect": is_perfect,
+        "forge_level": 0,
+        "is_forged": False,
+        "forge_set": None,
+        "passive": None,
     }
-    
+
     # 极品装备：在传说基础上×1.4，无等级限制，必带特殊属性，暴击伤害固定200%
     if is_perfect:
         equip["attack"] = int(equip["attack"] * 1.4)
@@ -150,7 +154,7 @@ def generate_weapon(level, rarity="普通", is_perfect=False, is_boss=False):
             {"name": "破甲", "value": random.randint(15, 25)},
             {"name": "连击", "value": random.randint(10, 18)},
         ])
-    
+
     # 史诗/传说有概率带特殊属性
     elif rarity in ["史诗", "传说"] and random.random() < RARITY[rarity]["special_chance"]:
         special_options = [
@@ -159,7 +163,7 @@ def generate_weapon(level, rarity="普通", is_perfect=False, is_boss=False):
             {"name": "连击", "value": random.randint(5, 10)},
         ]
         equip["special"] = random.choice(special_options)
-    
+
     return equip
 
 
@@ -192,8 +196,12 @@ def generate_armor(level, rarity="普通", is_perfect=False, is_boss=False):
         "special": None,
         "level_req": 0 if is_perfect else max(1, level - 2),
         "is_perfect": is_perfect,
+        "forge_level": 0,
+        "is_forged": False,
+        "forge_set": None,
+        "passive": None,
     }
-    
+
     # 极品装备：在传说基础上×1.4，无等级限制，必带特殊属性
     if is_perfect:
         equip["defense"] = int(equip["defense"] * 1.4)

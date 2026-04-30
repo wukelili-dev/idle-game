@@ -21,6 +21,9 @@ from modules.maps import get_all_maps, get_random_enemy, get_all_enemies
 from modules.inventory import NOVELTY_ITEMS, NOVELTY_RARITY_COLORS, NOVELTY_RARITY_NAMES
 from modules.plants import get_plant_catalog, get_plant_by_id, PLANT_RARITY_COLORS, PLANT_RARITY_NAMES
 from modules.ranch import RANCH_CATALOG
+from modules.forge import (FORGE_RECIPES, FORTIFY_CONFIG, PROTECT_CHARM_COST,
+                            FORGE_RARITY_COLORS, get_all_forge_recipes,
+                            get_fortify_info, get_forge_recipes_by_rarity)
 from modules.tavern import generate_tavern_roster
 from modules.factory import DEPARTMENTS as FACTORY_DEPTS, FACTORY_BUILD_COST, calc_factory_bonus as calc_fb, FACTORY_BASE_PROFIT, FACTORY_BASE_INTERVAL_S
 from modules.codex import CODEX_BOOKS
@@ -537,6 +540,7 @@ class HeroWorkshopApp:
             ("\U0001f331 农场", I.GRASS),
             ("\U0001f3ed 工厂", I.FACTORY),
             ("\U0001f43e 牧场", I.PETS),
+            ("\U0001f528 锻造", I.BUILD_CIRCLE),
         ]
         self._tab_bar = ft.TabBar(
             tabs=[ft.Tab(label, icon=icon) for label, icon in TABS],
@@ -555,6 +559,7 @@ class HeroWorkshopApp:
             self._build_farm_tab(),
             self._build_factory_tab(),
             self._build_ranch_tab(),
+            self._build_forge_tab(),
         ]
         self._tab_view = ft.TabBarView(controls=self._tab_contents, expand=True)
         self.right_tabs = ft.Tabs(
@@ -843,8 +848,18 @@ class HeroWorkshopApp:
         m = self.game.get_current_member()
         wpn = m.weapon
         arm = m.armor
-        self._refs["eq_weapon_lbl"].value = (f"武器: {wpn['name']}" if wpn else "武器: 未装备")
-        self._refs["eq_armor_lbl"].value = (f"护甲: {arm['name']}" if arm else "护甲: 未装备")
+        if wpn:
+            fl = wpn.get("forge_level", 0)
+            ftag = f" +{fl}" if fl > 0 else ""
+            self._refs["eq_weapon_lbl"].value = f"武器: {wpn['name']}{ftag}"
+        else:
+            self._refs["eq_weapon_lbl"].value = "武器: 未装备"
+        if arm:
+            fl = arm.get("forge_level", 0)
+            ftag = f" +{fl}" if fl > 0 else ""
+            self._refs["eq_armor_lbl"].value = f"护甲: {arm['name']}{ftag}"
+        else:
+            self._refs["eq_armor_lbl"].value = "护甲: 未装备"
 
         # 刷新格子
         for i in range(20):
@@ -854,11 +869,14 @@ class HeroWorkshopApp:
                 continue
             if item:
                 t = item.get("type", "item")
+                fl = item.get("forge_level", 0)
+                ftag = f"+{fl}" if fl > 0 else ""
+                name = item["name"][:5] + ftag
                 if t == "weapon":
-                    lbl.value = item["name"][:6]
+                    lbl.value = name
                     lbl.color = Cs("BLUE_400")
                 elif t == "armor":
-                    lbl.value = item["name"][:6]
+                    lbl.value = name
                     lbl.color = Cs("GREEN_400")
                 elif t == "novelty":
                     lbl.value = item["name"][:5]
@@ -1049,6 +1067,194 @@ class HeroWorkshopApp:
         ], scroll="auto", spacing=6)
         return ft.Container(content=ctr)
 
+    def _build_forge_tab(self):
+        """锻造与强化Tab"""
+        # ── 强化区域 ──
+        self._ref("fortify_select_lbl", ft.Text("选择装备: 未选择", size=F_BASE))
+        self._ref("fortify_info_lbl", ft.Text("", size=F_SM, color=Cs("GREY_600")))
+        self._ref("fortify_cost_lbl", ft.Text("", size=F_SM, color=CLR_ACCENT))
+        self._ref("fortify_btn", ft.Button("🔨 强化", scale=0.85, on_click=self._do_fortify))
+        self._ref("fortify_charm_btn", ft.Button("🛡 护锻符强化", scale=0.85,
+                    on_click=lambda e: self._do_fortify(e, use_charm=True)))
+
+        equip_opts = []
+        self._ref("fortify_dd", ft.Dropdown(
+            options=equip_opts,
+            hint_text="选择要强化的装备",
+            on_change=self._on_fortify_select,
+            expand=True,
+        ))
+
+        fortify_ctr = styled_card(ft.Column([
+            ft.Text("【强化装备】", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
+            ft.Text("消耗铁矿+金币提升装备属性(+1~+10)，+6起失败掉级", size=F_XS, color=Cs("GREY_500")),
+            ft.Divider(height=1),
+            self._refs["fortify_dd"],
+            self._refs["fortify_select_lbl"],
+            self._refs["fortify_info_lbl"],
+            self._refs["fortify_cost_lbl"],
+            ft.Row([
+                self._refs["fortify_btn"],
+                self._refs["fortify_charm_btn"],
+            ], spacing=8),
+        ], spacing=4), padding=10)
+
+        # ── 锻造区域 ──
+        self._ref("forge_recipes_ctr", ft.Column([], spacing=4, scroll="auto"))
+        self._ref("forge_select_lbl", ft.Text("选择材料品质:", size=F_SM))
+        rarity_btns = ft.Row([
+            ft.Button("白", scale=0.8, on_click=lambda e: self._show_forge_recipes(0)),
+            ft.Button("绿", scale=0.8, on_click=lambda e: self._show_forge_recipes(1)),
+            ft.Button("蓝", scale=0.8, on_click=lambda e: self._show_forge_recipes(2)),
+            ft.Button("紫", scale=0.8, on_click=lambda e: self._show_forge_recipes(3)),
+            ft.Button("橙", scale=0.8, on_click=lambda e: self._show_forge_recipes(4)),
+        ], spacing=4, alignment=ft.MainAxisAlignment.CENTER)
+
+        forge_ctr = styled_card(ft.Column([
+            ft.Text("【锻造装备】", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
+            ft.Text("消耗牧场产出物+铁矿+金币锻造独特装备，自带被动技能", size=F_XS, color=Cs("GREY_500")),
+            ft.Divider(height=1),
+            self._refs["forge_select_lbl"],
+            rarity_btns,
+            self._refs["forge_recipes_ctr"],
+        ], spacing=4), padding=10, expand=True)
+
+        ctr = ft.Column([
+            fortify_ctr,
+            forge_ctr,
+        ], scroll="auto", spacing=8, expand=True)
+        return ft.Container(content=ctr)
+
+    def _show_forge_recipes(self, rarity):
+        """展示指定品质的锻造配方"""
+        g = self.game
+        wh = g.ranch.get_warehouse_summary()
+        recipes = get_forge_recipes_by_rarity(rarity)
+        ctr = self._refs.get("forge_recipes_ctr")
+        if not ctr:
+            return
+        ctr.controls.clear()
+        rarity_names = ["白", "绿", "蓝", "紫", "橙"]
+        self._refs["forge_select_lbl"].value = f"品质: {rarity_names[rarity]} ({len(recipes)}件)"
+        for r in recipes:
+            mat_ok = wh.get(r["material"], 0) >= r["material_count"]
+            iron_ok = g.resources.get("铁矿", 0) >= r["iron"]
+            gold_ok = g.player.gold >= r["gold"]
+            can_forge = mat_ok and iron_ok and gold_ok
+            p = r["passive"]
+            passive_text = f"[{p['name']}] {p['desc']}" if p else ""
+            color = FORGE_RARITY_COLORS.get(r["rarity"], "#cccccc")
+            ctr.controls.append(ft.Container(
+                content=ft.Row([
+                    ft.Column([
+                        ft.Text(r["name"], size=F_BASE, weight=ft.FontWeight.BOLD, color=color),
+                        ft.Text(f"{r['material']}×{r['material_count']} + 铁矿×{r['iron']} + {r['gold']}G  |  {passive_text}",
+                                size=F_XS, color=Cs("GREY_600")),
+                    ], spacing=2, expand=True),
+                    ft.Button("锻造", scale=0.75, disabled=not can_forge,
+                              on_click=lambda e, rn=r["name"]: self._do_forge(rn)),
+                ], spacing=8),
+                padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4,
+            ))
+
+    def _do_forge(self, recipe_name):
+        ok, msg, equip = self.game.forge_equipment(recipe_name)
+        self.game.add_log(msg)
+        self._refresh_forge_tab()
+        self._refresh_all_ui()
+
+    def _on_fortify_select(self, e):
+        """当选择要强化的装备时更新信息"""
+        self._update_fortify_info()
+
+    def _update_fortify_info(self):
+        """更新强化信息显示"""
+        dd = self._refs.get("fortify_dd")
+        info_lbl = self._refs.get("fortify_info_lbl")
+        cost_lbl = self._refs.get("fortify_cost_lbl")
+        select_lbl = self._refs.get("fortify_select_lbl")
+        if not dd or not info_lbl or not cost_lbl:
+            return
+        val = dd.value
+        if not val:
+            info_lbl.value = ""
+            cost_lbl.value = ""
+            select_lbl.value = "选择装备: 未选择"
+            return
+        g = self.game
+        equip = None
+        if val == "__weapon__":
+            equip = g.player.weapon
+        elif val == "__armor__":
+            equip = g.player.armor
+        elif val.startswith("bag_"):
+            idx = int(val.split("_")[1])
+            equip = g.player.inventory.get(idx)
+        if not equip:
+            info_lbl.value = ""
+            cost_lbl.value = ""
+            return
+        info = g.get_fortify_info_for_ui(equip)
+        select_lbl.value = f"选中: {equip['name']} +{info['current']}"
+        if info.get("maxed"):
+            info_lbl.value = "已达到最高强化等级 +10!"
+            cost_lbl.value = ""
+        else:
+            info_lbl.value = (f"下级: +{info['next_level']}  属性+{info['next_bonus']}%  "
+                            f"成功率: {int(info['success_rate']*100)}%")
+            cost_lbl.value = f"消耗: 铁矿×{info['cost']['铁矿']} + {info['cost']['金币']}G"
+
+    def _do_fortify(self, e=None, use_charm=False):
+        dd = self._refs.get("fortify_dd")
+        if not dd or not dd.value:
+            self._show_toast("请选择要强化的装备")
+            return
+        g = self.game
+        val = dd.value
+        if val == "__weapon__":
+            equip_ref = g.player.weapon
+        elif val == "__armor__":
+            equip_ref = g.player.armor
+        elif val.startswith("bag_"):
+            idx = int(val.split("_")[1])
+            equip_ref = g.player.inventory.get(idx)
+        else:
+            return
+        if not equip_ref:
+            self._show_toast("装备不存在")
+            return
+        ok, msg = g.fortify_equipment(equip_ref, use_charm)
+        g.add_log(msg)
+        self._update_fortify_info()
+        self._refresh_all_ui()
+
+    def _refresh_forge_tab(self):
+        """刷新锻造Tab"""
+        g = self.game
+        # 更新强化下拉
+        dd = self._refs.get("fortify_dd")
+        if dd:
+            opts = []
+            p = g.player
+            if p.weapon and isinstance(p.weapon, dict):
+                lvl = p.weapon.get("forge_level", 0)
+                opts.append(ft.dropdown.Option("__weapon__", f"⚔ 武器: {p.weapon['name']} +{lvl}"))
+            if p.armor and isinstance(p.armor, dict):
+                lvl = p.armor.get("forge_level", 0)
+                opts.append(ft.dropdown.Option("__armor__", f"🛡 护甲: {p.armor['name']} +{lvl}"))
+            inv = p.get_inventory()
+            for i in range(inv.count()):
+                item = inv.get(i)
+                if item and item.get("type") in ("weapon", "armor"):
+                    lvl = item.get("forge_level", 0)
+                    opts.append(ft.dropdown.Option(f"bag_{i}", f"🎒 {item['name']} +{lvl}"))
+            dd.options = opts
+        # 首次显示时展示白品质配方
+        ctr = self._refs.get("forge_recipes_ctr")
+        if ctr and len(ctr.controls) == 0:
+            self._show_forge_recipes(0)
+        self._update_fortify_info()
+
     def _build_factory_tab(self):
         self._ref("factory_status_lbl",
                   ft.Text("\U0001f3ed 未建造", size=F_MD, color=ft.Colors.RED))
@@ -1183,8 +1389,18 @@ class HeroWorkshopApp:
         self._refs["def_lbl"].value = f"防御: {p.get_total_defense()}"
         self._refs["crit_lbl"].value = f"CRIT: {p.get_crit_rate()}%"
         self._refs["exp_lbl"].value = f"经验: {p.exp}/{p.level * 100}"
-        wn = p.weapon["name"] if p.weapon and isinstance(p.weapon, dict) else "None"
-        an = p.armor["name"] if p.armor and isinstance(p.armor, dict) else "None"
+        if p.weapon and isinstance(p.weapon, dict):
+            fl = p.weapon.get("forge_level", 0)
+            ftag = f" +{fl}" if fl > 0 else ""
+            wn = f"{p.weapon['name']}{ftag}"
+        else:
+            wn = "None"
+        if p.armor and isinstance(p.armor, dict):
+            fl = p.armor.get("forge_level", 0)
+            ftag = f" +{fl}" if fl > 0 else ""
+            an = f"{p.armor['name']}{ftag}"
+        else:
+            an = "None"
         self._refs["wpn_lbl"].value = f"武器: {wn}"
         self._refs["arm_lbl"].value = f"护甲: {an}"
 
@@ -1434,6 +1650,7 @@ class HeroWorkshopApp:
         # 刷新背包和材料(修复战斗掉落后UI不同步)
         self._refresh_bag()
         self._refresh_materials()
+        self._refresh_forge_tab()
 
     # ─── Actions ────────────────────────────────────────────────
     def _do_battle(self, e=None):

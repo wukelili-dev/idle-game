@@ -19,6 +19,10 @@ from .factory import (FACTORY_BUILD_COST, FACTORY_BASE_INTERVAL_S,
                       calc_factory_bonus)
 from .codex import CodexManager
 from .ranch_manager import RanchManager, get_creature_by_id, RARITY_PRICE
+from .forge import (FORTIFY_CONFIG, FORGE_RECIPES, PROTECT_CHARM_COST,
+                    get_fortify_info, get_forge_recipe_by_name,
+                    get_all_forge_recipes, build_forged_equip,
+                    get_set_effect, count_set_pieces)
 
 
 # ═══════════════ 伤害公式常量 ═══════════════
@@ -628,6 +632,10 @@ class GameCore:
             "level_req": wpn.get("level_req", 1),
             "is_perfect": False,
             "sell_price": sell_price,
+            "forge_level": 0,
+            "is_forged": False,
+            "forge_set": None,
+            "passive": None,
         }
         self.player.add_to_inventory(equip)
         self.add_log(f"购买装备进入背包: {wpn['name']}")
@@ -655,6 +663,10 @@ class GameCore:
             "level_req": arm.get("level_req", 1),
             "is_perfect": False,
             "sell_price": sell_price,
+            "forge_level": 0,
+            "is_forged": False,
+            "forge_set": None,
+            "passive": None,
         }
         self.player.add_to_inventory(equip)
         self.add_log(f"购买装备进入背包: {arm['name']}")
@@ -994,6 +1006,298 @@ class GameCore:
         self.add_log(f"💰 出售 {item['name']} 获得 {sell_price}G")
         return True, f"出售成功! +{sell_price}G"
 
+    # ═══════════════════ 强化与锻造系统 ═══════════════════
+
+    def fortify_equipment(self, equip_ref, use_charm=False):
+        """强化装备（+1~+10）
+        equip_ref: 装备dict的引用（player.weapon, player.armor, 或 backpack item）
+        use_charm: 是否使用护锻符保护不掉级
+        返回 (ok, message)
+        """
+        current_level = equip_ref.get("forge_level", 0)
+        if current_level >= 10:
+            return False, "已达到最高强化等级 +10!"
+
+        next_level = current_level + 1
+        info = get_fortify_info(next_level)
+        if not info:
+            return False, "强化配置错误!"
+
+        cost = dict(info["cost"])
+
+        # 检查护锻符
+        if use_charm:
+            charm_cost = dict(PROTECT_CHARM_COST)
+            for k, v in charm_cost.items():
+                cost[k] = cost.get(k, 0) + v
+
+        if not self.can_afford(cost):
+            cost_str = ", ".join(f"{k}{v}" for k, v in cost.items())
+            return False, f"资源不足! 需要: {cost_str}"
+
+        self.spend_resources(cost)
+
+        # 判定成功
+        success = random.random() < info["success_rate"]
+        if success:
+            equip_ref["forge_level"] = next_level
+            self.add_log(f"🔨 强化成功! {equip_ref['name']} → +{next_level}")
+            return True, f"强化成功! {equip_ref['name']} +{next_level}"
+        else:
+            charm_text = ""
+            if use_charm:
+                charm_text = "（护锻符保护不掉级）"
+                self.add_log(f"🔨 强化失败! {equip_ref['name']} 护锻符保护不掉级")
+            elif next_level > 5:
+                # +6~+10 失败掉1级
+                if current_level > 0:
+                    equip_ref["forge_level"] = current_level - 1
+                    self.add_log(f"🔨 强化失败! {equip_ref['name']} 掉回 +{current_level - 1}")
+                    return False, f"强化失败! 掉回 +{current_level - 1}{charm_text}"
+                else:
+                    self.add_log(f"🔨 强化失败! {equip_ref['name']} 保持 +{current_level}")
+                    return False, f"强化失败! 保持 +{current_level}{charm_text}"
+            else:
+                # +1~+5 不掉级
+                self.add_log(f"🔨 强化失败! {equip_ref['name']} 保持 +{current_level}")
+                return False, f"强化失败! 保持 +{current_level}{charm_text}"
+
+    def forge_equipment(self, recipe_name):
+        """锻造装备（使用牧场材料+铁矿+金币）
+        返回 (ok, message, equip_dict_or_None)
+        """
+        recipe = get_forge_recipe_by_name(recipe_name)
+        if not recipe:
+            return False, "锻造配方不存在!", None
+
+        # 检查核心材料
+        warehouse = self.ranch.get_warehouse_summary()
+        mat_name = recipe["material"]
+        mat_count = recipe["material_count"]
+        if warehouse.get(mat_name, 0) < mat_count:
+            return False, f"{mat_name}不足! 需要{mat_count}个, 当前{warehouse.get(mat_name, 0)}个", None
+
+        # 检查费用
+        cost = {"铁矿": recipe["iron"], "金币": recipe["gold"]}
+        if not self.can_afford(cost):
+            cost_str = ", ".join(f"{k}{v}" for k, v in cost.items())
+            return False, f"资源不足! 需要: {cost_str}", None
+
+        if self.player.inventory.is_full():
+            return False, "背包已满! (最多20件)", None
+
+        # 消耗
+        self.spend_resources(cost)
+        self.ranch.output_warehouse[mat_name] -= mat_count
+        if self.ranch.output_warehouse[mat_name] <= 0:
+            del self.ranch.output_warehouse[mat_name]
+
+        equip = build_forged_equip(recipe)
+        self.player.add_to_inventory(equip)
+        self.add_log(f"🔨 锻造成功! 获得 {equip['name']}")
+        return True, f"锻造成功! 获得 {equip['name']}", equip
+
+    def get_forge_recipes_for_ui(self):
+        """获取所有锻造配方（用于UI展示）"""
+        warehouse = self.ranch.get_warehouse_summary()
+        recipes = []
+        for r in get_all_forge_recipes():
+            can_forge = (
+                warehouse.get(r["material"], 0) >= r["material_count"]
+                and self.resources.get("铁矿", 0) >= r["iron"]
+                and self.player.gold >= r["gold"]
+            )
+            recipes.append({
+                **r,
+                "can_forge": can_forge,
+                "owned_mat": warehouse.get(r["material"], 0),
+            })
+        return recipes
+
+    def get_fortify_info_for_ui(self, equip):
+        """获取装备的强化信息（用于UI展示）"""
+        current = equip.get("forge_level", 0)
+        if current >= 10:
+            return {"current": 10, "maxed": True}
+        next_info = get_fortify_info(current + 1)
+        return {
+            "current": current,
+            "maxed": False,
+            "next_level": next_info["level"],
+            "next_bonus": next_info["bonus_pct"],
+            "cost": next_info["cost"],
+            "success_rate": next_info["success_rate"],
+        }
+
+    # ═══════════════════ 战斗被动效果处理 ═══════════════════
+
+    def _get_member_passives(self, member):
+        """获取成员所有被动效果列表"""
+        passives = []
+        for slot in [member.weapon, member.armor]:
+            if slot and isinstance(slot, dict):
+                p = slot.get("passive")
+                if p and isinstance(p, dict):
+                    passives.append(p)
+        # 套装效果
+        pieces = []
+        for slot in [member.weapon, member.armor]:
+            if slot and isinstance(slot, dict) and slot.get("is_forged"):
+                pieces.append(slot)
+        for eq in pieces:
+            fs = eq.get("forge_set")
+            if fs:
+                count = count_set_pieces(pieces, fs)
+                effect = get_set_effect(fs, count)
+                if effect:
+                    passives.append(effect)
+        return passives
+
+    def _apply_battle_start_passives(self, member):
+        """应用战斗开始时的被动效果"""
+        for p in self._get_member_passives(member):
+            if p.get("start_heal_pct"):
+                heal = int(member.get_max_hp_with_bonus() * p["start_heal_pct"] / 100)
+                member.heal(heal)
+                self.add_battle_log(f"  {member.role_name} 生机回复 +{heal} HP")
+            if p.get("random_buff"):
+                import random as _rnd
+                buff = _rnd.choice(["atk", "def", "crit", "lifesteal", "hp"])
+                if buff == "atk":
+                    p["_active_buff"] = {"atk_pct": 10}
+                    self.add_battle_log(f"  {member.role_name} 五行·攻 +10%")
+                elif buff == "def":
+                    p["_active_buff"] = {"def_pct": 10}
+                    self.add_battle_log(f"  {member.role_name} 五行·防 +10%")
+                elif buff == "crit":
+                    p["_active_buff"] = {"crit_bonus": 10}
+                    self.add_battle_log(f"  {member.role_name} 五行·暴击 +10%")
+                elif buff == "lifesteal":
+                    p["_active_buff"] = {"lifesteal": 8}
+                    self.add_battle_log(f"  {member.role_name} 五行·吸血 +8%")
+                else:
+                    p["_active_buff"] = {"hp_pct": 10}
+                    self.add_battle_log(f"  {member.role_name} 五行·HP +10%")
+        member._battle_turn = 0
+        member._shield_hp = 0
+        member._death_save_used = False
+        member._kill_atk_buff_turns = 0
+        member._kill_atk_buff = 0
+
+    def _apply_attack_passives(self, member, enemy_data):
+        """应用攻击时的被动效果，返回额外伤害"""
+        extra_dmg = 0
+        for p in self._get_member_passives(member):
+            # 毒伤: 攻击附带X%最大生命毒伤
+            if p.get("poison_pct"):
+                extra_dmg += int(enemy_data["hp"] * p["poison_pct"] / 100)
+            # 火焰伤害: 攻击附带X%攻击力的火焰伤害
+            if p.get("fire_dmg_pct"):
+                extra_dmg += int(member.get_total_attack() * p["fire_dmg_pct"] / 100)
+            # 首回合额外伤害
+            if p.get("first_strike_pct") and member._battle_turn <= 1:
+                extra_dmg += int(member.get_total_attack() * p["first_strike_pct"] / 100)
+        return extra_dmg
+
+    def _on_attack_hit_passives(self, member, enemy_data):
+        """攻击命中后的额外效果，返回 (extra_msgs, confuse_enemy)"""
+        msgs = []
+        confuse = False
+        for p in self._get_member_passives(member):
+            # 幻惑: X%概率使敌人混乱
+            if p.get("confuse_chance") and random.random() * 100 < p["confuse_chance"]:
+                confuse = True
+                msgs.append(f"  {member.role_name} 幻惑触发! 敌人混乱1回合!")
+        return msgs, confuse
+
+    def _apply_defend_passives(self, member, attacker_name, incoming_dmg):
+        """应用受击时的被动效果，返回 (actual_dmg, stun_attacker, msgs)"""
+        msgs = []
+        stun = False
+        actual = incoming_dmg
+        for p in self._get_member_passives(member):
+            # 闪避
+            if p.get("dodge") and random.randint(1, 100) <= p["dodge"]:
+                actual = 0
+                msgs.append(f"  {member.role_name} 闪避了攻击!")
+                return actual, stun, msgs
+            # 云盾吸收
+            if getattr(member, '_shield_hp', 0) > 0:
+                absorbed = min(member._shield_hp, actual)
+                member._shield_hp -= absorbed
+                actual -= absorbed
+                msgs.append(f"  {member.role_name} 云盾吸收 {absorbed} 伤害!")
+            # 受击眩晕
+            if p.get("stun_chance") and random.randint(1, 100) <= p["stun_chance"]:
+                stun = True
+                msgs.append(f"  {member.role_name} 荆棘反击! {attacker_name} 眩晕!")
+        return actual, stun, msgs
+
+    def _apply_per_turn_passives(self, member):
+        """每回合开始的被动效果"""
+        msgs = []
+        member._battle_turn += 1
+        # 云盾
+        for p in self._get_member_passives(member):
+            shield_interval = p.get("cloud_shield_interval")
+            if shield_interval and member._battle_turn % shield_interval == 0:
+                shield_pct = p.get("cloud_shield_pct", 15)
+                member._shield_hp = int(member.get_max_hp_with_bonus() * shield_pct / 100)
+                msgs.append(f"  {member.role_name} 获得云盾 (吸收{member._shield_hp}伤害)")
+            # 每N回合回血
+            regen_interval = p.get("regen_interval")
+            if regen_interval and member._battle_turn % regen_interval == 0:
+                heal = int(member.get_max_hp_with_bonus() * p["regen_pct"] / 100)
+                member.heal(heal)
+                msgs.append(f"  {member.role_name} 回复 +{heal} HP")
+            # 击杀后攻击buff衰减
+            if member._kill_atk_buff_turns > 0:
+                member._kill_atk_buff_turns -= 1
+                if member._kill_atk_buff_turns <= 0:
+                    member._kill_atk_buff = 0
+                    msgs.append(f"  {member.role_name} 嗜血buff消失")
+        return msgs
+
+    def _apply_on_kill_passives(self, member):
+        """击杀敌人后的被动效果"""
+        msgs = []
+        for p in self._get_member_passives(member):
+            # 击杀回复HP
+            if p.get("kill_heal_pct"):
+                heal = int(member.get_max_hp_with_bonus() * p["kill_heal_pct"] / 100)
+                member.heal(heal)
+                msgs.append(f"  {member.role_name} 噬魂回复 +{heal} HP")
+            # 击杀后攻击buff
+            if p.get("kill_atk_buff"):
+                member._kill_atk_buff = p["kill_atk_buff"]
+                member._kill_atk_buff_turns = p.get("kill_buff_turns", 2)
+                msgs.append(f"  {member.role_name} 嗜血! 攻击+{member._kill_atk_buff}% ({member._kill_atk_buff_turns}回合)")
+        return msgs
+
+    def _get_gold_bonus_pct(self):
+        """获取全队金币掉落加成"""
+        total = 0
+        for m in self.team:
+            for p in self._get_member_passives(m):
+                total += p.get("gold_bonus_pct", 0)
+        return total
+
+    def _get_exp_bonus_pct(self):
+        """获取全队经验加成"""
+        total = 0
+        for m in self.team:
+            for p in self._get_member_passives(m):
+                total += p.get("exp_bonus_pct", 0)
+        return total
+
+    def _get_kill_gold_bonus_pct(self):
+        """获取击杀怪物金币加成"""
+        total = 0
+        for m in self.team:
+            for p in self._get_member_passives(m):
+                total += p.get("kill_gold_pct", 0)
+        return total
+
     # ── Material Trading ──
     MATERIAL_PRICES = {
         "木材": {"sell": 2, "buy": 4},
@@ -1125,47 +1429,99 @@ class GameCore:
     # ═══════════════════ 队伍战斗逻辑 ═══════════════════
 
     def battle_team(self, enemy_data, is_boss=False):
-        """队伍战斗（全员随机顺序攻击，怪物随机目标）"""
+        """队伍战斗（全员随机顺序攻击，怪物随机目标），含被动效果处理"""
         if self.is_battling:
             return False, '战斗中...'
 
-        # 战斗前不清满HP，只在战斗失败时恢复50%
-        # self.heal_full_team()  # 已移除，防止战斗后下一场突然满血
         self.is_battling = True
         e_hp = enemy_data['hp']
+        e_max_hp = e_hp
         boss_tag = ' [BOSS]' if is_boss else ''
         self.add_battle_log('队伍战斗: 群雄 vs {0}{1}'.format(enemy_data['name'], boss_tag))
 
+        # ── 战斗开始被动 ──
+        for m in self.team:
+            self._apply_battle_start_passives(m)
+
         while e_hp > 0:
+            # ── 每回合被动 ──
+            for m in self.team:
+                if m.hp > 0:
+                    for msg in self._apply_per_turn_passives(m):
+                        self.add_battle_log(msg)
+
             # ---- 队友全员攻击阶段（随机顺序）----
             alive = [m for m in self.team if m.hp > 0]
             if not alive:
                 break
 
-            random.shuffle(alive)  # 随机攻击顺序
+            random.shuffle(alive)
             for member in alive:
                 if e_hp <= 0:
                     break
                 if member.hp <= 0:
                     continue
 
-                p_dmg = calc_damage(member.get_total_attack(), enemy_data['defense'])
-                is_crit = random.randint(1, 100) <= member.get_crit_rate()
+                # 检查无视防御
+                eff_def = enemy_data['defense']
+                for p in self._get_member_passives(member):
+                    if p.get("ignore_def_pct"):
+                        eff_def = int(eff_def * (1 - p["ignore_def_pct"] / 100))
+                    if p.get("ignore_def_chance") and random.randint(1, 100) <= p["ignore_def_chance"]:
+                        eff_def = 0
+                        self.add_battle_log('  {0} 破甲触发! 无视防御!'.format(member.role_name))
+
+                p_dmg = calc_damage(member.get_total_attack(), eff_def)
+
+                # 击杀buff
+                if getattr(member, '_kill_atk_buff', 0) > 0:
+                    p_dmg = int(p_dmg * (1 + member._kill_atk_buff / 100))
+
+                # 暴击判定
+                crit_rate = member.get_crit_rate()
+                for p in self._get_member_passives(member):
+                    if p.get("_active_buff", {}).get("crit_bonus"):
+                        crit_rate += p["_active_buff"]["crit_bonus"]
+                is_crit = random.randint(1, 100) <= crit_rate
                 crit_mult = member.weapon.get("crit_dmg", 150) if isinstance(member.weapon, dict) else 150
+                # 暴击伤害加成
+                for p in self._get_member_passives(member):
+                    if p.get("crit_bonus_pct"):
+                        crit_mult += p["crit_bonus_pct"]
                 if is_crit:
                     p_dmg = int(p_dmg * crit_mult / 100)
                     self.add_battle_log('  {0} 暴击! {1} 伤害!'.format(member.role_name, p_dmg))
                 else:
                     self.add_battle_log('  {0} 攻击造成 {1} 伤害'.format(member.role_name, p_dmg))
+
+                # 额外伤害（毒伤/火焰/首回合）
+                extra = self._apply_attack_passives(member, enemy_data)
+                if extra:
+                    p_dmg += extra
+                    self.add_battle_log('  {0} 附加伤害 +{1}'.format(member.role_name, extra))
+
                 e_hp -= p_dmg
 
-                # 吸血效果
+                # 攻击命中被动（幻惑等）
+                hit_msgs, confuse = self._on_attack_hit_passives(member, enemy_data)
+                for msg in hit_msgs:
+                    self.add_battle_log(msg)
+
+                # 吸血效果（原有special）
                 for slot in [member.weapon, member.armor]:
                     if isinstance(slot, dict) and slot.get('special', {}).get('name') == '吸血':
                         heal = int(p_dmg * slot['special']['value'] / 100)
                         if heal > 0:
                             member.heal(heal)
                             self.add_battle_log('  {0} 吸血 +{1} HP'.format(member.role_name, heal))
+                    # 五行buff吸血
+                    if isinstance(slot, dict):
+                        active = slot.get('passive', {}).get('_active_buff', {})
+                        if active.get('lifesteal'):
+                            heal = int(p_dmg * active['lifesteal'] / 100)
+                            if heal > 0:
+                                member.heal(heal)
+                                self.add_battle_log('  {0} 五行吸血 +{1} HP'.format(member.role_name, heal))
 
             if e_hp <= 0:
                 break
@@ -1176,17 +1532,48 @@ class GameCore:
                 break
             target = random.choice(alive)
             e_dmg = calc_damage(enemy_data['attack'], target.get_total_defense())
-            target.take_damage(e_dmg)
-            self.add_battle_log('  {0} 攻击 {1} -{2} HP'.format(enemy_data['name'], target.role_name, e_dmg))
+
+            # 受击被动（闪避/云盾/眩晕）
+            actual_dmg, stun, def_msgs = self._apply_defend_passives(target, enemy_data['name'], e_dmg)
+            for msg in def_msgs:
+                self.add_battle_log(msg)
+
+            if actual_dmg > 0:
+                target.take_damage(actual_dmg)
+                self.add_battle_log('  {0} 攻击 {1} -{2} HP'.format(enemy_data['name'], target.role_name, actual_dmg))
 
             if target.is_player:
                 self._try_auto_potion()
 
-            # 通报倒下成员
+            # 通报倒下成员 + 死亡被动
             for m in self.team:
                 if m.hp <= 0 and not getattr(m, '_died_reported', False):
-                    self.add_battle_log('  {0} 倒下了!'.format(m.role_name))
-                    m._died_reported = True
+                    # 死亡免死检查
+                    saved = False
+                    for p in self._get_member_passives(m):
+                        if p.get("death_save") and not getattr(m, '_death_save_used', False):
+                            m.hp = 1
+                            m._death_save_used = True
+                            self.add_battle_log('  {0} 圣佑触发! 免死!'.format(m.role_name))
+                            saved = True
+                        if p.get("death_save_heal") and not getattr(m, '_death_save_used', False):
+                            heal = int(m.get_max_hp_with_bonus() * p["death_save_heal"] / 100)
+                            m.hp = heal
+                            m._death_save_used = True
+                            self.add_battle_log('  {0} 涅槃触发! 回复 +{1} HP'.format(m.role_name, heal))
+                            saved = True
+                    if not saved:
+                        m._died_reported = True
+                        self.add_battle_log('  {0} 倒下了!'.format(m.role_name))
+                        # 死亡时队友buff
+                        for p in self._get_member_passives(m):
+                            if p.get("death_buff_atk_pct"):
+                                for ally in self.team:
+                                    if ally is not m and ally.hp > 0:
+                                        ally._death_ally_buff = p["death_buff_atk_pct"]
+                                        ally._death_ally_buff_turns = p.get("death_buff_turns", 3)
+                                        self.add_battle_log('  {0} 牺牲! {1} 攻击+{2}%'.format(
+                                            m.role_name, ally.role_name, p["death_buff_atk_pct"]))
 
             time.sleep(0.3)
 
@@ -1195,15 +1582,36 @@ class GameCore:
 
         if alive and e_hp <= 0:
             self.add_battle_log('胜利! 击败 {0}!'.format(enemy_data['name']))
+
+            # 击杀被动
+            for m in self.team:
+                if m.hp > 0:
+                    for msg in self._apply_on_kill_passives(m):
+                        self.add_battle_log(msg)
+
+            # 经验（含被动加成）
             total_exp = enemy_data['exp']
+            exp_bonus = self._get_exp_bonus_pct()
+            if exp_bonus:
+                total_exp = int(total_exp * (1 + exp_bonus / 100))
             exp_per = total_exp // len(self.team)
             for m in self.team:
                 m._died_reported = False
                 msgs = m.gain_exp(exp_per)
                 for msg in msgs:
                     self.add_battle_log('  {0}'.format(msg))
-            self.player.gold += enemy_data['gold']
-            self.add_battle_log('  +{0} 经验(平分) +{1}G'.format(total_exp, enemy_data['gold']))
+
+            # 金币（含被动加成）
+            gold_earned = enemy_data['gold']
+            gold_bonus = self._get_gold_bonus_pct()
+            kill_gold_bonus = self._get_kill_gold_bonus_pct()
+            if gold_bonus:
+                gold_earned = int(gold_earned * (1 + gold_bonus / 100))
+            if kill_gold_bonus:
+                gold_earned = int(gold_earned * (1 + kill_gold_bonus / 100))
+            self.player.gold += gold_earned
+            self.add_battle_log('  +{0} 经验(平分) +{1}G'.format(total_exp, gold_earned))
+
             for item, amount in enemy_data['drops'].items():
                 self.resources[item] = self.resources.get(item, 0) + amount
                 self.add_battle_log('  +{0} {1}'.format(amount, item))
@@ -1228,7 +1636,6 @@ class GameCore:
             next_enemy, next_is_boss = get_random_enemy(self.current_map)
             self.current_enemy = next_enemy
             self.current_enemy_is_boss = next_is_boss
-            # 图鉴：发现怪物
             if self.current_enemy:
                 ename = self.current_enemy.get("name", "")
                 eicon = self.current_enemy.get("icon", "👾")
@@ -1249,7 +1656,6 @@ class GameCore:
             next_enemy, next_is_boss = get_random_enemy(self.current_map)
             self.current_enemy = next_enemy
             self.current_enemy_is_boss = next_is_boss
-            # 图鉴：发现怪物
             if self.current_enemy:
                 ename = self.current_enemy.get("name", "")
                 eicon = self.current_enemy.get("icon", "👾")
