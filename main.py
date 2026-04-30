@@ -959,6 +959,8 @@ class HeroWorkshopApp:
 
     def _build_farm_tab(self):
         self._ref("farm_count_lbl", ft.Text("\U0001f331 我的农场: 0/10", size=13))
+        self._ref("farm_feed_lbl", ft.Text("🌾 饲料: -", size=F_BASE, color="#795548"))
+        self._ref("farm_fert_lbl", ft.Text("🧪 肥料: -", size=F_BASE, color="#6A1B9A"))
         self._ref("farm_plants_ctr", ft.Column([], spacing=4, scroll="auto"))
         self._ref("farm_seeds_ctr", ft.Column([], spacing=4, scroll="auto"))
         for pd in get_plant_catalog():
@@ -974,7 +976,13 @@ class HeroWorkshopApp:
                 )
             )
         ctr = ft.Column([
-            self._refs["farm_count_lbl"],
+            ft.Row([
+                self._refs["farm_count_lbl"],
+                ft.Container(width=12),
+                self._refs["farm_feed_lbl"],
+                ft.Container(width=12),
+                self._refs["farm_fert_lbl"],
+            ], wrap=True, spacing=4),
             styled_card(ft.Container(content=self._refs["farm_plants_ctr"], height=180), padding=6),
             ft.Text("种子商店", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
             styled_card(self._refs["farm_seeds_ctr"], padding=6, expand=True),
@@ -1224,6 +1232,16 @@ class HeroWorkshopApp:
         if flbl:
             flbl.value = f"\U0001f331 我的农场: {len(g.plants)}/10"
 
+        # 刷新饲料/肥料库存
+        feed_lbl = self._refs.get("farm_feed_lbl")
+        if feed_lbl:
+            parts = [f"{k}×{v}" for k, v in g.feed_bag.items()] if g.feed_bag else ["无"]
+            feed_lbl.value = "🌾 饲料: " + ", ".join(parts)
+        fert_lbl = self._refs.get("farm_fert_lbl")
+        if fert_lbl:
+            parts = [f"{k}×{v}" for k, v in g.fertilizer_bag.items()] if g.fertilizer_bag else ["无"]
+            fert_lbl.value = "🧪 肥料: " + ", ".join(parts)
+
         # 更新植物列表
         fctr = self._refs.get("farm_plants_ctr")
         if fctr:
@@ -1240,15 +1258,34 @@ class HeroWorkshopApp:
                         if status_info["adult"]:
                             status = f"\U0001f7e2 {status_info['progress']}"
                             color = Cs("GREEN_600")
-                            btn = ft.Text("自动产金中", size=11, color=Cs("GREEN_600"))
+                            # 成年：显示产金+产饲料信息
+                            feed_info = ""
+                            if g.feed_bag:
+                                feed_info = " | " + " ".join(f"{k}×{v}" for k, v in g.feed_bag.items())
+                            btn = ft.Text(f"自动产金中{feed_info}", size=11, color=Cs("GREEN_600"))
                         else:
                             status = f"{status_info['progress']}"
                             color = Cs("ORANGE_600")
-                            btn = ft.Row([
-                                ft.Text("种植中", size=11, color=Cs("GREY_500")),
+                            fert_count = len(plant.get("fertilizers", []))
+                            mut_bonus = plant.get("mutation_bonus", 0.0)
+                            fert_text = f" | 施肥×{fert_count}" if fert_count > 0 else ""
+                            if mut_bonus > 0:
+                                fert_text += f" 变异+{mut_bonus*100:.1f}%"
+                            btn_children = [
+                                ft.Text(f"种植中{fert_text}", size=11, color=Cs("GREY_500")),
                                 ft.Button("⚡", scale=0.7,
                                           on_click=lambda e, p=plant: self._speedup(p)),
-                            ], spacing=4)
+                            ]
+                            # 肥料按钮
+                            if g.fertilizer_bag.get("普通肥料", 0) > 0:
+                                btn_children.append(
+                                    ft.Button("🧪普肥", scale=0.7,
+                                              on_click=lambda e, p=plant: self._use_fertilizer(p, "普通肥料")))
+                            if g.fertilizer_bag.get("精制肥料", 0) > 0:
+                                btn_children.append(
+                                    ft.Button("🧪精肥", scale=0.7,
+                                              on_click=lambda e, p=plant: self._use_fertilizer(p, "精制肥料")))
+                            btn = ft.Row(btn_children, spacing=4)
 
                         fctr.controls.append(
                             ft.Container(
@@ -1544,6 +1581,10 @@ class HeroWorkshopApp:
 
     def _speedup(self, plant):
         ok, msg = self.game.speedup_plant(plant["id"])
+        self.game.add_log(msg)
+
+    def _use_fertilizer(self, plant, fertilizer_type):
+        ok, msg = self.game.use_fertilizer(plant["id"], fertilizer_type)
         self.game.add_log(msg)
 
     def _build_factory_tab_action(self, e=None):

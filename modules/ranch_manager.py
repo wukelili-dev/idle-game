@@ -2,6 +2,7 @@
 牧场管理器 - 牧场生物购买、饲养、产出、卖出
 """
 import time
+import random
 from .ranch import RANCH_CATALOG
 
 # 性格加成系数
@@ -81,9 +82,11 @@ class RanchManager:
         return True, f"�喂养 {creature['icon']} {creature['name']}!", new_gold
 
     def check_outputs(self):
-        """检查所有已饲养生物是否产出，产出则添加到仓库"""
+        """检查所有已饲养生物是否产出，产出则添加到仓库。
+        返回 (changed, fertilizer_gains) — fertilizer_gains 为 {肥料类型: 数量}"""
         now = time.time()
         changed = False
+        fertilizer_gains = {}
 
         for instance in self.ranch_inventory:
             if instance["last_fed_at"] is None:
@@ -93,6 +96,7 @@ class RanchManager:
             if not creature:
                 continue
 
+            rarity = creature.get("rarity", 0)
             personality = creature.get("personality", "乖巧")
             bonus = PERSONALITY_BONUS.get(personality, 1.0)
             interval = LAZY_OUTPUT_INTERVAL if personality == "懒惰" else BASE_OUTPUT_INTERVAL
@@ -111,7 +115,15 @@ class RanchManager:
                 instance["output_count"] += 1
                 changed = True
 
-        return changed
+                # 肥料产出：白/绿/蓝(0-2) 30%→普通肥料，紫/橙(3-4) 50%→精制肥料
+                if rarity >= 3:
+                    if random.random() < 0.5:
+                        fertilizer_gains["精制肥料"] = fertilizer_gains.get("精制肥料", 0) + 1
+                else:
+                    if random.random() < 0.3:
+                        fertilizer_gains["普通肥料"] = fertilizer_gains.get("普通肥料", 0) + 1
+
+        return changed, fertilizer_gains
 
     def harvest_creature(self, index: int):
         """手动收获指定生物的产出（立即结算），返回 (output_info or None)"""

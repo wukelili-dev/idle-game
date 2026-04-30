@@ -24,6 +24,13 @@ from .ranch_manager import RanchManager, get_creature_by_id, RARITY_PRICE
 # ═══════════════ 伤害公式常量 ═══════════════
 DEF_COEFF = 50  # 防御衰减系数，DEF越高中和收益递减越慢
 
+# ═══════════════ 农场饲料产出 ═══════════════
+FEED_INTERVAL_BY_RARITY = {0: 600, 1: 600, 2: 480, 3: 480, 4: 360}
+FEED_TYPE_BY_RARITY = {0: "普通饲料", 1: "普通饲料", 2: "高级饲料", 3: "高级饲料", 4: "精华饲料"}
+
+# ═══════════════ 肥料递减系数 ═══════════════
+FERTILIZER_DIMINISHING = [1.0, 0.7, 0.4, 0.25, 0.15, 0.1]
+
 
 def calc_damage(attack, defense):
     """计算伤害（使用防御衰减公式）
@@ -87,6 +94,10 @@ class GameCore:
 
         # ── 牧场系统 ──
         self.ranch = RanchManager()
+
+        # ── 饲料/肥料背包 ──
+        self.feed_bag = {}       # {"普通饲料": N, "高级饲料": N, "精华饲料": N}
+        self.fertilizer_bag = {}  # {"普通肥料": N, "精制肥料": N}
 
     def _start_wage_system(self):
         """启动工资支付系统"""
@@ -162,6 +173,18 @@ class GameCore:
                     plant["harvest_count"] = current_harvests
                     changed = True
 
+                # 饲料产出
+                feed_interval = FEED_INTERVAL_BY_RARITY.get(pd.get("rarity", 0), 600)
+                feed_type = FEED_TYPE_BY_RARITY.get(pd.get("rarity", 0), "普通饲料")
+                prev_feeds = plant.get("feed_count", 0)
+                current_feeds = int(adult_elapsed // feed_interval)
+                if current_feeds > prev_feeds:
+                    gain = current_feeds - prev_feeds
+                    self.feed_bag[feed_type] = self.feed_bag.get(feed_type, 0) + gain
+                    self.add_log(f"🌾 {pd['icon']} {pd['name']} 产出 {feed_type}×{gain}")
+                    plant["feed_count"] = current_feeds
+                    changed = True
+
                 # 枯萎检测
                 if adult_elapsed >= pd["adult_lifespan_s"]:
                     self.add_log(f"🥀 {pd['name']} 枯萎了")
@@ -190,6 +213,9 @@ class GameCore:
             "plant_id": plant_id,
             "planted_at": time.time(),
             "harvest_count": 0,
+            "feed_count": 0,
+            "fertilizers": [],
+            "mutation_bonus": 0.0,
         }
         self.plants.append(plant)
         self.add_log(f"🌱 种下了 {pd['icon']} {pd['name']}")
@@ -223,6 +249,55 @@ class GameCore:
         plant["planted_at"] = time.time() - pd["grow_time_s"]
         self.add_log(f"⚡ 加速了 {pd['name']} 的生长 (花费 {cost}G)")
         return True, f"已加速! {pd['name']} 立即成熟"
+
+    def use_fertilizer(self, plant_id, fertilizer_type):
+        """对作物使用肥料，缩短生长时间并提升变异概率（效果递减）"""
+        if fertilizer_type not in self.fertilizer_bag or self.fertilizer_bag[fertilizer_type] <= 0:
+            return False, f"{fertilizer_type}不足!"
+
+        plant = None
+        for p in self.plants:
+            if p["id"] == plant_id:
+                plant = p
+                break
+        if not plant:
+            return False, "植物不存在"
+
+        pd = get_plant_by_id(plant["plant_id"])
+        elapsed = time.time() - plant["planted_at"]
+        if elapsed >= pd["grow_time_s"]:
+            return False, "已成年，无需施肥"
+
+        # 消耗肥料
+        self.fertilizer_bag[fertilizer_type] -= 1
+        if self.fertilizer_bag[fertilizer_type] <= 0:
+            del self.fertilizer_bag[fertilizer_type]
+
+        # 递减系数
+        fert_count = len(plant.get("fertilizers", []))
+        factor = FERTILIZER_DIMINISHING[min(fert_count, len(FERTILIZER_DIMINISHING) - 1)]
+
+        # 肥料效果
+        if fertilizer_type == "精制肥料":
+            grow_pct = 0.08 * factor
+            mutation_pct = 0.02 * factor
+        else:
+            grow_pct = 0.03 * factor
+            mutation_pct = 0.005 * factor
+
+        # 缩短生长时间
+        remaining = pd["grow_time_s"] - elapsed
+        shorten = remaining * grow_pct
+        plant["planted_at"] += shorten
+
+        # 累加变异概率
+        plant["fertilizers"] = plant.get("fertilizers", [])
+        plant["fertilizers"].append(fertilizer_type)
+        plant["mutation_bonus"] = plant.get("mutation_bonus", 0.0) + mutation_pct
+
+        pct_str = f"{grow_pct*100:.1f}%"
+        self.add_log(f"🧪 对 {pd['name']} 使用{fertilizer_type}: 生长-{pct_str} 变异+{mutation_pct*100:.1f}%")
+        return True, f"已施肥! {pd['name']} 生长-{pct_str}"
 
     def get_plant_status(self, plant_id):
         """返回植物当前状态详情"""
@@ -622,6 +697,9 @@ class GameCore:
                 "plant_id": plant_id,
                 "planted_at": time.time(),
                 "harvest_count": 0,
+                "feed_count": 0,
+                "fertilizers": [],
+                "mutation_bonus": 0.0,
             }
             self.plants.append(plant)
             self.add_log(f"🌱 种下了 {pd['icon']} {pd['name']} (掉落物)")
@@ -1259,7 +1337,11 @@ class GameCore:
 
     def ranch_tick(self):
         """牧场产出Tick（可由主循环调用或独立线程）"""
-        return self.ranch.check_outputs()
+        changed, fertilizer_gains = self.ranch.check_outputs()
+        for fert_type, count in fertilizer_gains.items():
+            self.fertilizer_bag[fert_type] = self.fertilizer_bag.get(fert_type, 0) + count
+            self.add_log(f"🧪 牧场产出 {fert_type}×{count}")
+        return changed
 
     def tavern_from_dict(self, data):
         """酒馆状态反序列化"""
@@ -1290,6 +1372,8 @@ class GameCore:
             "ranch": self.ranch.to_dict(),
             "current_member_idx": self.current_member_idx,
             "mutated_plants": self.mutated_plants,
+            "feed_bag": self.feed_bag,
+            "fertilizer_bag": self.fertilizer_bag,
         }
 
     def from_dict(self, data):
@@ -1316,6 +1400,8 @@ class GameCore:
         self.ranch.from_dict(data.get("ranch", {}))
         self.current_member_idx = data.get("current_member_idx", 0)
         self.mutated_plants = data.get("mutated_plants", {})
+        self.feed_bag = data.get("feed_bag", {})
+        self.fertilizer_bag = data.get("fertilizer_bag", {})
         # 重启建筑生产线程
         for name, levels in self.building_levels.items():
             for idx in range(len(levels)):
