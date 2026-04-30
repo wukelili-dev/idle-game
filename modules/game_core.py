@@ -63,7 +63,8 @@ class GameCore:
         self.auto_battle_thread = None
         self.auto_potion_threshold = 0  # 0=关, 30/50/80=血量百分比阈值
         self.running = True
-        self.logs = []
+        self.logs = []       # 杂项日志（农场/牧场/建筑/系统）
+        self.battle_logs = [] # 战斗日志
         self.production_active = set()
         self.wonders = {}  # 已建造的奇观 {name: True}
         # ── 队伍系统 ──
@@ -127,11 +128,18 @@ class GameCore:
         self.wage_thread.start()
 
     def add_log(self, msg):
-        """添加日志"""
+        """添加杂项日志"""
         timestamp = time.strftime("%H:%M:%S")
         self.logs.append(f"[{timestamp}] {msg}")
         if len(self.logs) > 100:
             self.logs.pop(0)
+
+    def add_battle_log(self, msg):
+        """添加战斗日志"""
+        timestamp = time.strftime("%H:%M:%S")
+        self.battle_logs.append(f"[{timestamp}] {msg}")
+        if len(self.battle_logs) > 100:
+            self.battle_logs.pop(0)
 
     # ═══════════════════ 农场系统 ═══════════════════
 
@@ -769,7 +777,7 @@ class GameCore:
         self.is_battling = True
         e_hp = enemy_data["hp"]
         boss_tag = " [BOSS]" if is_boss else ""
-        self.add_log(f"战斗: 英雄 vs {enemy_data['name']}{boss_tag}")
+        self.add_battle_log(f"战斗: 英雄 vs {enemy_data['name']}{boss_tag}")
 
         while e_hp > 0 and self.player.hp > 0:
             # 玩家攻击怪物
@@ -778,9 +786,9 @@ class GameCore:
             crit_mult = self.player.weapon.get("crit_dmg", 150) if isinstance(self.player.weapon, dict) else 150
             if is_crit:
                 p_dmg = int(p_dmg * crit_mult / 100)
-                self.add_log(f"  暴击! {p_dmg} 伤害!")
+                self.add_battle_log(f"  暴击! {p_dmg} 伤害!")
             else:
-                self.add_log(f"  你对敌人造成 {p_dmg} 伤害")
+                self.add_battle_log(f"  你对敌人造成 {p_dmg} 伤害")
             e_hp -= p_dmg
             
             # 吸血效果
@@ -790,14 +798,14 @@ class GameCore:
                 heal = int(p_dmg * lifesteal / 100)
                 if heal > 0:
                     self.player.heal(heal)
-                    self.add_log(f"  💉 吸血恢复 {heal} HP")
+                    self.add_battle_log(f"  💉 吸血恢复 {heal} HP")
             special = self.player.armor.get("special") if isinstance(self.player.armor, dict) else None
             if special and special.get("name") == "吸血":
                 lifesteal = special["value"]
                 heal = int(p_dmg * lifesteal / 100)
                 if heal > 0:
                     self.player.heal(heal)
-                    self.add_log(f"  💉 吸血恢复 {heal} HP")
+                    self.add_battle_log(f"  💉 吸血恢复 {heal} HP")
             
             if e_hp <= 0:
                 break
@@ -805,7 +813,7 @@ class GameCore:
             # 敌人攻击怪物
             e_dmg = calc_damage(enemy_data["attack"], self.player.get_total_defense())
             self.player.take_damage(e_dmg)
-            self.add_log(f"  {enemy_data['name']} 对英雄造成 {e_dmg} 伤害")
+            self.add_battle_log(f"  {enemy_data['name']} 对英雄造成 {e_dmg} 伤害")
 
             # 自动药水检查（被攻击后立即判断）
             self._try_auto_potion()
@@ -813,13 +821,13 @@ class GameCore:
             time.sleep(0.5)
 
         if self.player.hp > 0:
-            self.add_log(f"胜利! 击败 {enemy_data['name']}!")
+            self.add_battle_log(f"胜利! 击败 {enemy_data['name']}!")
             self.player.gold += enemy_data["gold"]
             self.player.kill_count += 1
-            self.add_log(f"  +{enemy_data['exp']} 经验 +{enemy_data['gold']} 金币")
+            self.add_battle_log(f"  +{enemy_data['exp']} 经验 +{enemy_data['gold']} 金币")
             for item, amount in enemy_data["drops"].items():
                 self.resources[item] = self.resources.get(item, 0) + amount
-                self.add_log(f"  +{amount} {item}")
+                self.add_battle_log(f"  +{amount} {item}")
             
             # 装备掉落
             drop = generate_drop(enemy_data.get("level", 1), is_boss)
@@ -828,7 +836,7 @@ class GameCore:
                 drop["sell_price"] = self._calc_drop_sell_price(drop)
                 self.player.add_to_inventory(drop)
                 summary = get_drop_summary(drop)
-                self.add_log(f"  🎁 获得装备: {summary}")
+                self.add_battle_log(f"  🎁 获得装备: {summary}")
             
             # 小物件掉落（30%概率，掉落商店杂货）
             if random.random() < 0.3:
@@ -844,20 +852,20 @@ class GameCore:
                     "sell_price": sell_price,   # 可出售!
                 }
                 self.player.add_to_inventory(novelty)
-                self.add_log(f"  🎁 捡到小物件: {item['name']}")
+                self.add_battle_log(f"  🎁 捡到小物件: {item['name']}")
             
             msgs = self.player.gain_exp(enemy_data["exp"])
             for m in msgs:
-                self.add_log(m)
+                self.add_battle_log(m)
             # 战斗胜利后获取下一个敌人
             next_enemy, next_is_boss = get_random_enemy(self.current_map)
             self.current_enemy = next_enemy
             self.current_enemy_is_boss = next_is_boss
             return True, "Victory"
         else:
-            self.add_log(f"被 {enemy_data['name']}!")
+            self.add_battle_log(f"被 {enemy_data['name']}!")
             self.player.hp = self.player.get_max_hp_with_bonus() // 2
-            self.add_log(f"恢复: {self.player.hp}/{self.player.get_max_hp_with_bonus()}")
+            self.add_battle_log(f"恢复: {self.player.hp}/{self.player.get_max_hp_with_bonus()}")
             # 战斗失败后也获取新敌人
             next_enemy, next_is_boss = get_random_enemy(self.current_map)
             self.current_enemy = next_enemy
@@ -886,7 +894,7 @@ class GameCore:
                     result, msg = self.battle_team(enemy, is_boss=is_boss)
                     self.is_battling = False
                 else:
-                    self.add_log("没有可用敌人!")
+                    self.add_battle_log("没有可用敌人!")
                     break
             time.sleep(0.5)
 
@@ -926,7 +934,7 @@ class GameCore:
         enemy, is_boss = get_random_enemy(self.current_map)
         if enemy:
             boss_tag = " [BOSS]" if is_boss else ""
-            self.add_log(f"🔄 刷新敌人: {enemy['name']}{boss_tag}")
+            self.add_battle_log(f"🔄 刷新敌人: {enemy['name']}{boss_tag}")
         return enemy, is_boss, "已刷新敌人"
 
     def _calc_shop_sell_price(self, cost):
@@ -1126,7 +1134,7 @@ class GameCore:
         self.is_battling = True
         e_hp = enemy_data['hp']
         boss_tag = ' [BOSS]' if is_boss else ''
-        self.add_log('队伍战斗: 群雄 vs {0}{1}'.format(enemy_data['name'], boss_tag))
+        self.add_battle_log('队伍战斗: 群雄 vs {0}{1}'.format(enemy_data['name'], boss_tag))
 
         while e_hp > 0:
             # ---- 队友全员攻击阶段（随机顺序）----
@@ -1146,9 +1154,9 @@ class GameCore:
                 crit_mult = member.weapon.get("crit_dmg", 150) if isinstance(member.weapon, dict) else 150
                 if is_crit:
                     p_dmg = int(p_dmg * crit_mult / 100)
-                    self.add_log('  {0} 暴击! {1} 伤害!'.format(member.role_name, p_dmg))
+                    self.add_battle_log('  {0} 暴击! {1} 伤害!'.format(member.role_name, p_dmg))
                 else:
-                    self.add_log('  {0} 攻击造成 {1} 伤害'.format(member.role_name, p_dmg))
+                    self.add_battle_log('  {0} 攻击造成 {1} 伤害'.format(member.role_name, p_dmg))
                 e_hp -= p_dmg
 
                 # 吸血效果
@@ -1157,7 +1165,7 @@ class GameCore:
                         heal = int(p_dmg * slot['special']['value'] / 100)
                         if heal > 0:
                             member.heal(heal)
-                            self.add_log('  {0} 吸血 +{1} HP'.format(member.role_name, heal))
+                            self.add_battle_log('  {0} 吸血 +{1} HP'.format(member.role_name, heal))
 
             if e_hp <= 0:
                 break
@@ -1169,7 +1177,7 @@ class GameCore:
             target = random.choice(alive)
             e_dmg = calc_damage(enemy_data['attack'], target.get_total_defense())
             target.take_damage(e_dmg)
-            self.add_log('  {0} 攻击 {1} -{2} HP'.format(enemy_data['name'], target.role_name, e_dmg))
+            self.add_battle_log('  {0} 攻击 {1} -{2} HP'.format(enemy_data['name'], target.role_name, e_dmg))
 
             if target.is_player:
                 self._try_auto_potion()
@@ -1177,7 +1185,7 @@ class GameCore:
             # 通报倒下成员
             for m in self.team:
                 if m.hp <= 0 and not getattr(m, '_died_reported', False):
-                    self.add_log('  {0} 倒下了!'.format(m.role_name))
+                    self.add_battle_log('  {0} 倒下了!'.format(m.role_name))
                     m._died_reported = True
 
             time.sleep(0.3)
@@ -1186,26 +1194,26 @@ class GameCore:
         alive = [m for m in self.team if m.hp > 0]
 
         if alive and e_hp <= 0:
-            self.add_log('胜利! 击败 {0}!'.format(enemy_data['name']))
+            self.add_battle_log('胜利! 击败 {0}!'.format(enemy_data['name']))
             total_exp = enemy_data['exp']
             exp_per = total_exp // len(self.team)
             for m in self.team:
                 m._died_reported = False
                 msgs = m.gain_exp(exp_per)
                 for msg in msgs:
-                    self.add_log('  {0}'.format(msg))
+                    self.add_battle_log('  {0}'.format(msg))
             self.player.gold += enemy_data['gold']
-            self.add_log('  +{0} 经验(平分) +{1}G'.format(total_exp, enemy_data['gold']))
+            self.add_battle_log('  +{0} 经验(平分) +{1}G'.format(total_exp, enemy_data['gold']))
             for item, amount in enemy_data['drops'].items():
                 self.resources[item] = self.resources.get(item, 0) + amount
-                self.add_log('  +{0} {1}'.format(amount, item))
+                self.add_battle_log('  +{0} {1}'.format(amount, item))
 
             drop = generate_drop(enemy_data.get('level', 1), is_boss)
             if drop:
                 drop['sell_price'] = self._calc_drop_sell_price(drop)
                 self.player.inventory.add(drop)
                 summary = get_drop_summary(drop)
-                self.add_log('  获得装备: {0}'.format(summary))
+                self.add_battle_log('  获得装备: {0}'.format(summary))
 
             if random.random() < 0.3:
                 item = random.choice(NOVELTY_ITEMS)
@@ -1215,7 +1223,7 @@ class GameCore:
                     'sell_price': int(item['price'] * 0.8),
                 }
                 self.player.inventory.add(novelty)
-                self.add_log('  捡到小物件: {0}'.format(item['name']))
+                self.add_battle_log('  捡到小物件: {0}'.format(item['name']))
 
             next_enemy, next_is_boss = get_random_enemy(self.current_map)
             self.current_enemy = next_enemy
@@ -1233,10 +1241,10 @@ class GameCore:
         else:
             for m in self.team:
                 m._died_reported = False
-            self.add_log('队伍全灭! 被 {0} 击败...'.format(enemy_data['name']))
+            self.add_battle_log('队伍全灭! 被 {0} 击败...'.format(enemy_data['name']))
             for m in self.team:
                 m.hp = m.get_max_hp_with_bonus() // 2
-            self.add_log('  全体恢复: {0}/{1}'.format(
+            self.add_battle_log('  全体恢复: {0}/{1}'.format(
                 self.player.hp, self.player.get_max_hp_with_bonus()))
             next_enemy, next_is_boss = get_random_enemy(self.current_map)
             self.current_enemy = next_enemy
@@ -1374,6 +1382,7 @@ class GameCore:
             "mutated_plants": self.mutated_plants,
             "feed_bag": self.feed_bag,
             "fertilizer_bag": self.fertilizer_bag,
+            "battle_logs": self.battle_logs,
         }
 
     def from_dict(self, data):
@@ -1402,6 +1411,7 @@ class GameCore:
         self.mutated_plants = data.get("mutated_plants", {})
         self.feed_bag = data.get("feed_bag", {})
         self.fertilizer_bag = data.get("fertilizer_bag", {})
+        self.battle_logs = data.get("battle_logs", [])
         # 重启建筑生产线程
         for name, levels in self.building_levels.items():
             for idx in range(len(levels)):

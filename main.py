@@ -483,12 +483,22 @@ class HeroWorkshopApp:
             padding=8,
         ))
 
-        # Combat log
-        self.log_view = ft.ListView(expand=True, spacing=2, auto_scroll=True)
+        # Battle log
+        self.battle_log_view = ft.ListView(expand=True, spacing=2, auto_scroll=True)
         col.controls.append(styled_card(
             ft.Column([
-                ft.Text("\U0001f4cb 战斗日志", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
-                ft.Container(content=self.log_view,
+                ft.Text("\U0001f4cb 战斗日志", size=F_MD, weight=ft.FontWeight.BOLD, color="#C62828"),
+                ft.Container(content=self.battle_log_view,
+                             bgcolor="#FFF5F5", border_radius=4, padding=6, expand=True),
+            ], spacing=4),
+            padding=8, expand=True,
+        ))
+        # Misc log (farm/ranch/system)
+        self.misc_log_view = ft.ListView(expand=True, spacing=2, auto_scroll=True)
+        col.controls.append(styled_card(
+            ft.Column([
+                ft.Text("\U0001f4dc 杂项日志", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
+                ft.Container(content=self.misc_log_view,
                              bgcolor="#F5F7FA", border_radius=4, padding=6, expand=True),
             ], spacing=4),
             padding=8, expand=True,
@@ -1107,29 +1117,37 @@ class HeroWorkshopApp:
 
     # ─── Update Loop ────────────────────────────────────────────
     async def _update_loop(self):
-        last_log_len = 0
-        battle_log_len = 0
+        last_misc_len = 0
+        last_battle_len = 0
         while True:
             await asyncio.sleep(0.3)
             try:
                 self._refresh_all_ui()
                 self._refresh_materials()
                 self.game.ranch_tick()
-                if len(self.game.logs) != last_log_len:
-                    self._refresh_log()
-                    last_log_len = len(self.game.logs)
-                    battle_log_len = len(self.game.logs)
-                elif self.game.is_battling and len(self.game.logs) != battle_log_len:
-                    self._refresh_log()
-                    battle_log_len = len(self.game.logs)
+                if len(self.game.logs) != last_misc_len:
+                    self._refresh_misc_log()
+                    last_misc_len = len(self.game.logs)
+                if len(self.game.battle_logs) != last_battle_len:
+                    self._refresh_battle_log()
+                    last_battle_len = len(self.game.battle_logs)
                 self.page.update()
             except RuntimeError:
                 break
 
-    def _refresh_log(self):
-        self.log_view.controls.clear()
+    def _refresh_battle_log(self):
+        self.battle_log_view.controls.clear()
+        for msg in self.game.battle_logs[-60:]:
+            self.battle_log_view.controls.append(ft.Text(msg, size=F_SM))
+        try:
+            self.page.update()
+        except Exception:
+            pass
+
+    def _refresh_misc_log(self):
+        self.misc_log_view.controls.clear()
         for msg in self.game.logs[-60:]:
-            self.log_view.controls.append(ft.Text(msg, size=F_SM))
+            self.misc_log_view.controls.append(ft.Text(msg, size=F_SM))
         try:
             self.page.update()
         except Exception:
