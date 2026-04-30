@@ -31,13 +31,46 @@ RARITY_COLORS = ["#cccccc", "#4FC3F7", "#BA68C8", "#FFA726", "#EF5350"]
 RANCH_RARITY_COLORS = {1: "#4caf50", 2: "#2196f3", 3: "#9c27b0", 4: "#ff9800", 5: "#f44336"}
 MONSTER_RARITY_COLORS = {1: "#4caf50", 2: "#2196f3", 3: "#9c27b0", 4: "#ff9800", 5: "#f44336"}
 
-RANCH_RARITY_COLORS = {1: "#4caf50", 2: "#2196f3", 3: "#9c27b0", 4: "#ff9800", 5: "#f44336"}
-MONSTER_RARITY_COLORS = {1: "#4caf50", 2: "#2196f3", 3: "#9c27b0", 4: "#ff9800", 5: "#f44336"}
-
+# ═══════════════ 视觉常量 ═══════════════
+# 字体层级
+F_XS, F_SM, F_BASE, F_MD, F_LG, F_XL, F_XXL = 10, 11, 12, 13, 14, 16, 18
+# 主题色
+CLR_PRIMARY = "#1565C0"
+CLR_ACCENT = "#B8860B"
+CLR_SECTION_BG = "#F8F9FA"
+CLR_CARD_BG = "#FFFFFF"
+CLR_BODY_BG = "#F0F2F5"
 
 def Cs(name):
     return getattr(ft.Colors, name, ft.Colors.GREY_500)
 
+def section_header(text, icon=""):
+    """统一区域标题"""
+    return ft.Container(
+        content=ft.Row([
+            ft.Text(f"{icon} {text}", size=F_MD, weight=ft.FontWeight.BOLD,
+                    color="#37474F"),
+        ]),
+        padding=ft.Padding.only(left=4, top=8, bottom=6),
+    )
+
+def styled_card(content, padding=8, accent_left=None, expand=False):
+    """统一卡片容器：白底、微阴影、圆角、可选左侧强调色"""
+    border = None
+    if accent_left:
+        border = ft.Border.only(left=ft.BorderSide(color=accent_left, width=3))
+    return ft.Container(
+        content=content,
+        padding=padding,
+        bgcolor=CLR_CARD_BG,
+        border_radius=8,
+        border=border,
+        shadow=ft.BoxShadow(spread_radius=1, blur_radius=4, color="#18000000"),
+        expand=expand,
+    )
+
+def divider_h():
+    return ft.Container(height=1, bgcolor="#E8ECF0")
 
 def cost_str(cost):
     if not cost:
@@ -91,15 +124,26 @@ class HeroWorkshopApp:
 
     # ─── Top Bar ────────────────────────────────────────────────
     def _build_top_bar(self):
-        self._ref("kills_label", ft.Text("击杀: 0", size=13, color=Cs("GREY_500")))
-        self._ref("gold_label", ft.Text("💡 100", size=15, weight=ft.FontWeight.BOLD, color="#B8860B"))
-        ab = ft.AppBar(title=ft.Text("⚔ 勇者工坊 v5.1", size=18, weight=ft.FontWeight.BOLD), actions=[
-            self._refs["kills_label"],
-            ft.Container(width=20),
-            self._refs["gold_label"],
-            ft.Container(width=10),
-            ft.IconButton(icon=I.MENU, icon_size=22, tooltip="菜单", on_click=lambda e: self._show_menu(e)),
-        ])
+        self._ref("kills_label", ft.Text("击杀: 0", size=F_SM, color=Cs("GREY_400")))
+        self._ref("gold_label", ft.Text("\U0001fa99 100", size=F_MD, weight=ft.FontWeight.BOLD, color=CLR_ACCENT))
+        ab = ft.AppBar(
+            title=ft.Text("⚔ 勇者工坊 v5.1", size=F_XL, weight=ft.FontWeight.BOLD),
+            bgcolor=CLR_PRIMARY,
+            color=ft.Colors.WHITE,
+            actions=[
+                self._refs["kills_label"],
+                ft.Container(width=16),
+                ft.Container(
+                    content=self._refs["gold_label"],
+                    bgcolor="#FFFFFF20",
+                    border_radius=20,
+                    padding=ft.Padding.only(left=12, right=12, top=4, bottom=4),
+                ),
+                ft.Container(width=8),
+                ft.IconButton(icon=I.MENU, icon_size=20, icon_color=ft.Colors.WHITE,
+                              tooltip="菜单", on_click=lambda e: self._show_menu(e)),
+            ],
+        )
         self.page.appbar = ab
 
     # ─── Body ──────────────────────────────────────────────────
@@ -226,79 +270,64 @@ class HeroWorkshopApp:
 
     # ─── Left Panel ─────────────────────────────────────────────
     def _build_left(self):
-        col = ft.Column(spacing=0, expand=True)
+        col = ft.Column(spacing=2, expand=True)
 
-        # Resources
-        col.controls.append(ft.Container(
-            content=ft.Column([
-                ft.Text("\U0001f4e6 资源", size=14, weight=ft.FontWeight.BOLD, color=Cs("GREY_700")),
-                ft.Divider(height=1),
-            ], spacing=4),
-            padding=ft.Padding.all(8),
-            border=ft.Border.all(1, Cs("OUTLINE")),
-            border_radius=6,
-            margin=ft.Margin.only(right=4, bottom=4),
-        ))
-
+        # Resources — styled card
+        res_header = ft.Row([
+            ft.Text("\U0001f4e6 资源", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
+        ])
+        res_rows = []
         MATERIALS = [("木材", "\U0001f332"), ("铁矿", "⛏️"),
                      ("皮革", "\U0001f9e4"), ("石头", "⛰️")]
         for name, icon in MATERIALS:
-            col.controls.append(ft.Row([
-                ft.Text(f"{icon} {name}:", size=13, expand=2),
-                self._ref(f"res_{name}", ft.Text("0", size=13, weight=ft.FontWeight.BOLD, expand=1)),
-                ft.IconButton(icon=I.REMOVE, icon_size=15, on_click=lambda e, n=name: self._sell_mat(n, 1)),
-                ft.Text("\xd7", size=12),
-                ft.IconButton(icon=I.ADD, icon_size=15, on_click=lambda e, n=name: self._buy_mat(n, 1)),
-            ], spacing=2, tight=True))
+            res_rows.append(ft.Row([
+                ft.Text(f"{icon} {name}:", size=F_BASE, expand=2),
+                self._ref(f"res_{name}", ft.Text("0", size=F_MD, weight=ft.FontWeight.BOLD, expand=1)),
+                ft.IconButton(icon=I.REMOVE, icon_size=14, on_click=lambda e, n=name: self._sell_mat(n, 1)),
+                ft.IconButton(icon=I.ADD, icon_size=14, on_click=lambda e, n=name: self._buy_mat(n, 1)),
+            ], spacing=1, tight=True))
+        res_inner = ft.Column([res_header, divider_h()] + res_rows, spacing=4)
+        col.controls.append(styled_card(res_inner, padding=ft.Padding.all(10), accent_left=CLR_PRIMARY))
 
         # Buildings
-        col.controls.append(ft.Container(
-            content=ft.Text("\U0001f3d7 建筑", size=14, weight=ft.FontWeight.BOLD, color=Cs("GREY_700")),
-            padding=ft.Padding.only(left=4, top=10, bottom=4),
-        ))
+        col.controls.append(section_header("\U0001f3d7 建筑"))
         self.building_cards = ft.Column(spacing=4, scroll="auto")
         col.controls.append(self.building_cards)
         for bname in get_all_building_names():
             self.building_cards.controls.append(self._build_building_card(bname))
 
         # Wonders
-        col.controls.append(ft.Container(
-            content=ft.Text("✨ 奇观", size=14, weight=ft.FontWeight.BOLD, color=Cs("GREY_700")),
-            padding=ft.Padding.only(left=4, top=8, bottom=4),
-        ))
+        col.controls.append(section_header("✨ 奇观"))
         self.wonder_cards = ft.Column(spacing=3, scroll="auto")
         col.controls.append(self.wonder_cards)
         for wname in get_wonder_names():
             self.wonder_cards.controls.append(self._build_wonder_card(wname))
 
-        ret = self._ref("left_panel", ft.Container(content=col, width=self._left_width, expand=True, padding=4, bgcolor=Cs("SURFACE_CONTAINER_LOWEST")))
+        ret = self._ref("left_panel", ft.Container(content=col, width=self._left_width, expand=True, padding=6, bgcolor=CLR_BODY_BG))
 
         return ret
 
     def _build_instance_card(self, name, idx, level, workers, max_workers, output, interval):
-        cfg = BUILDING_CONFIGS[name]
-        hire_cost = cfg.worker_cost.get("金币", 50)
         return ft.Container(
             content=ft.Column([
                 ft.Row([
-                    ft.Text(f"  #{idx+1} Lv{level}", size=11, expand=True, color=Cs("GREY_700")),
-                    ft.Text(f"{output}/{interval}s", size=10, color=Cs("BLUE_700")),
+                    ft.Text(f"#{idx+1} Lv{level}", size=F_XS, expand=True, color="#546E7A"),
+                    ft.Text(f"{output}/{interval}s", size=F_XS, color="#1565C0"),
                 ], spacing=2, tight=True),
                 ft.Row([
                     ft.OutlinedButton("升级", scale=0.7,
                                       on_click=lambda e, n=name, i=idx: self._upgrade_building(n, i)),
-                    ft.Text(f"工:{workers}/{max_workers}", size=10, expand=1, color=Cs("GREY_600")),
+                    ft.Text(f"工:{workers}/{max_workers}", size=F_XS, expand=1, color=Cs("GREY_600")),
                     ft.IconButton(icon=I.REMOVE, icon_size=12,
                                    on_click=lambda e, n=name, i=idx: self._fire_worker(n, i)),
-                    ft.Text("✕", size=9),
                     ft.IconButton(icon=I.ADD, icon_size=12,
                                    on_click=lambda e, n=name, i=idx: self._hire_worker(n, i)),
-                ], spacing=2, tight=True),
+                ], spacing=1, tight=True),
             ], spacing=2),
-            padding=ft.Padding.only(left=4, right=4, top=3, bottom=3),
-            border=ft.Border.all(1, Cs("GREY_300")),
+            padding=ft.Padding.only(left=6, right=4, top=3, bottom=3),
             border_radius=4,
-            bgcolor="#fafafa",
+            bgcolor="#F5F7FA",
+            margin=ft.Margin.only(left=8, bottom=1),
         )
 
     @staticmethod
@@ -311,51 +340,44 @@ class HeroWorkshopApp:
 
     def _build_building_card(self, name):
         """返回建筑标题卡片 + 实例容器。实例卡片在建造/升级时动态刷新。"""
-        instance_ctr = self._ref(f"bld_instances_{name}", ft.Column(spacing=2))
+        instance_ctr = self._ref(f"bld_instances_{name}", ft.Column(spacing=1))
         return ft.Column([
             ft.Container(
                 content=ft.Row([
-                    ft.Text(name, size=13, weight=ft.FontWeight.BOLD, expand=True),
-                    ft.Container(
-                        content=self._ref(f"bld_count_{name}", ft.Text("x0", size=12, color=Cs("GREY_500"))),
-                        padding=ft.Padding.only(right=4),
-                    ),
+                    ft.Text(name, size=F_BASE, weight=ft.FontWeight.BOLD, expand=True),
+                    self._ref(f"bld_count_{name}", ft.Text("x0", size=F_SM, color=Cs("GREY_500"))),
                 ]),
                 padding=ft.Padding.only(left=6, top=4, bottom=4),
-                bgcolor=Cs("GREY_100"),
-                border_radius=4,
+                bgcolor="#E3F2FD",
+                border_radius=ft.BorderRadius.only(top_left=6, top_right=6),
             ),
             instance_ctr,
             ft.Container(
-                content=ft.Row([
-                    ft.Text("建造", size=11, expand=1),
-                    ft.Button("建造 +1", scale=0.75,
-                              on_click=lambda e, n=name: self._build_building(n)),
-                ], spacing=4, tight=True),
-                padding=ft.Padding.only(left=4, right=4, bottom=2),
+                content=ft.Column([
+                    ft.Row([
+                        ft.Text("建造", size=F_XS, expand=1),
+                        ft.Button("建造 +1", scale=0.75,
+                                  on_click=lambda e, n=name: self._build_building(n)),
+                    ], spacing=4, tight=True),
+                    ft.Text(self._fmt_build_cost(name), size=F_XS, color=Cs("GREY_500")),
+                ], spacing=2),
+                padding=ft.Padding.only(left=4, right=4, top=2, bottom=4),
             ),
-            ft.Container(
-                content=ft.Text(self._fmt_build_cost(name), size=10, color=Cs("GREY_500")),
-                padding=ft.Padding.only(left=6, bottom=4),
-            ),
-        ], spacing=1)
+        ], spacing=0)
 
     def _build_wonder_card(self, name):
-        wonder_btn = ft.Button("建造奇观", scale=0.9, on_click=lambda e, n=name: self._build_wonder(n))
+        wonder_btn = ft.Button("建造奇观", scale=0.85, on_click=lambda e, n=name: self._build_wonder(n))
         self.wonder_btns[name] = wonder_btn
-        return ft.Container(
-            content=ft.Column([
+        return styled_card(
+            ft.Column([
                 ft.Row([
-                    ft.Text(name, size=13, weight=ft.FontWeight.BOLD, expand=True),
-                    self._ref(f"wonder_count_{name}", ft.Text("x0", size=12, color=Cs("GREY_500"))),
+                    ft.Text(name, size=F_BASE, weight=ft.FontWeight.BOLD, expand=True),
+                    self._ref(f"wonder_count_{name}", ft.Text("x0", size=F_SM, color=Cs("GREY_500"))),
                 ]),
-                self._ref(f"wonder_info_{name}", ft.Text("未建造", size=11, color=Cs("GREY_400"))),
-                ft.Container(
-                    content=wonder_btn,
-                    alignment=ft.alignment.Alignment(0.5, 0.5),
-                ),
+                self._ref(f"wonder_info_{name}", ft.Text("未建造", size=F_SM, color=Cs("GREY_400"))),
+                ft.Container(content=wonder_btn, alignment=ft.alignment.Alignment(0.5, 0.5)),
             ], spacing=3),
-            padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=6,
+            padding=8, accent_left="#FFA726",
         )
 
     def _build_center(self):
@@ -366,111 +388,110 @@ class HeroWorkshopApp:
         self.team_btns = []
         for i in range(3):
             btn = ft.Button(
-                ft.Text("..." * 3, size=14, weight=ft.FontWeight.W_500), width=120,
+                ft.Text("..." * 3, size=F_MD, weight=ft.FontWeight.W_500), width=110,
                 on_click=lambda e, idx=i: self._switch_member(idx)
             )
             self.team_btns.append(btn)
             team_row.controls.append(btn)
         team_row.controls.append(
-            ft.Button(ft.Text("\U0001f37a 酒馆", size=14, weight=ft.FontWeight.W_500),
+            ft.Button(ft.Text("\U0001f37a 酒馆", size=F_MD, weight=ft.FontWeight.W_500),
                       on_click=self._open_tavern_tab)
         )
-        col.controls.append(ft.Container(
-            content=ft.Column([
-                ft.Text("\U0001f465 队伍", size=14, weight=ft.FontWeight.BOLD),
+        col.controls.append(styled_card(
+            ft.Column([
+                ft.Text("\U0001f465 队伍", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
                 team_row,
             ], spacing=4),
-            padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=6,
+            padding=8,
         ))
 
         # Hero stats
         self.hero_stats = ft.Column(spacing=1)
-        col.controls.append(ft.Container(
-            content=ft.Column([
-                self._ref("hero_name_lbl", ft.Text("\U0001f9d9 勇者 Lv.1", size=14, weight=ft.FontWeight.BOLD)),
+        col.controls.append(styled_card(
+            ft.Column([
+                self._ref("hero_name_lbl", ft.Text("\U0001f9d9 勇者 Lv.1", size=F_LG, weight=ft.FontWeight.BOLD, color=CLR_PRIMARY)),
+                divider_h(),
                 self.hero_stats,
-            ], spacing=2),
-            padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=6,
+            ], spacing=4),
+            padding=8, accent_left=CLR_PRIMARY,
         ))
         self._init_hero_stats()
 
         # Map + Enemy
         map_btns_row = ft.Row(wrap=True, spacing=6)
         for mname in get_all_maps().keys():
-            btn = ft.Button(ft.Text(mname, size=14, weight=ft.FontWeight.W_500),
+            btn = ft.Button(ft.Text(mname, size=F_MD, weight=ft.FontWeight.W_500),
                              on_click=lambda e, m=mname: self._change_map(m),
                              style=ft.ButtonStyle(bgcolor=Cs("BLUE_600"), color=ft.Colors.WHITE))
             map_btns_row.controls.append(btn)
             self._ref(f"map_btn_{mname}", btn)
 
-        col.controls.append(ft.Container(
-            content=ft.Column([
-                ft.Text("\U0001f5fa 地图", size=14, weight=ft.FontWeight.BOLD),
-                self._ref("map_lbl", ft.Text("傲来国", size=13, color=Cs("BLUE_700"))),
+        col.controls.append(styled_card(
+            ft.Column([
+                ft.Text("\U0001f5fa 地图", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
+                self._ref("map_lbl", ft.Text("傲来国", size=F_MD, color=Cs("BLUE_700"), weight=ft.FontWeight.W_500)),
                 map_btns_row,
-                ft.Divider(),
+                divider_h(),
                 self._ref("enemy_display",
-                          ft.Text("\U0001f480 ??? HP:?? ATK:??", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_800)),
+                          ft.Text("\U0001f480 ??? HP:?? ATK:??", size=F_MD, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_800)),
                 ft.Row([
                     ft.Button("\U0001f504 刷新敌人", on_click=self._refresh_enemy),
-                    self._ref("refresh_cost_lbl", ft.Text("", size=12)),
+                    self._ref("refresh_cost_lbl", ft.Text("", size=F_BASE)),
                 ], spacing=4),
             ], spacing=4),
-            padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=6,
+            padding=8,
         ))
 
         # Battle buttons
-        col.controls.append(ft.Container(
-            content=ft.Column([
+        col.controls.append(styled_card(
+            ft.Column([
                 self._ref("battle_btn",
                           ft.Button("⚔ 战斗", width=200, height=45,
                                             on_click=self._do_battle,
-                                            style=ft.ButtonStyle(bgcolor=Cs("BLUE_600")))),
+                                            style=ft.ButtonStyle(bgcolor="#C62828", color=ft.Colors.WHITE))),
                 self._ref("auto_btn",
                           ft.Button("⚡ 自动战斗", width=200,
                                             on_click=self._toggle_auto,
                                             style=ft.ButtonStyle(bgcolor=Cs("ORANGE_600")))),
                 self._ref("auto_status_lbl",
-                          ft.Text("自动: 关", size=12, color=Cs("GREY_500"))),
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4),
-            padding=4,
+                          ft.Text("自动: 关", size=F_SM, color=Cs("GREY_500"))),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6),
+            padding=10,
         ))
 
-        # Auto potion threshold
+        # Potions
         thresh_opts = ["OFF", "30%", "50%", "80%"]
         self._ref("auto_potion_dd", ft.Dropdown(
             options=[ft.dropdown.Option(o) for o in thresh_opts],
             value="OFF", width=80, height=32,
         ))
-        self._ref("auto_potion_lbl", ft.Text("已关闭", size=12, color=Cs("GREY_500")))
-        # Potions
-        col.controls.append(ft.Container(
-            content=ft.Column([
-                ft.Text("\U0001f9ea 药水", size=14, weight=ft.FontWeight.BOLD),
+        self._ref("auto_potion_lbl", ft.Text("已关闭", size=F_SM, color=Cs("GREY_500")))
+        col.controls.append(styled_card(
+            ft.Column([
+                ft.Text("\U0001f9ea 药水", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
                 ft.Row([
                     ft.Button("购买 (25G)", scale=0.85, on_click=self._buy_potion),
-                    self._ref("potions_lbl", ft.Text("x0", size=13)),
+                    self._ref("potions_lbl", ft.Text("x0", size=F_MD)),
                     ft.Button("使用 +20HP", scale=0.85, on_click=self._use_potion),
-                ], spacing=4),
+                ], spacing=6),
                 ft.Row([
-                    ft.Text("自动 HP<", size=12),
+                    ft.Text("自动 HP<", size=F_BASE),
                     self._refs["auto_potion_dd"],
                     self._refs["auto_potion_lbl"],
                 ], spacing=4, alignment=ft.MainAxisAlignment.START),
             ], spacing=4),
-            padding=6, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=6,
+            padding=8,
         ))
 
         # Combat log
         self.log_view = ft.ListView(expand=True, spacing=2, auto_scroll=True)
-        col.controls.append(ft.Container(
-            content=ft.Column([
-                ft.Text("\U0001f4cb 战斗日志", size=14, weight=ft.FontWeight.BOLD),
+        col.controls.append(styled_card(
+            ft.Column([
+                ft.Text("\U0001f4cb 战斗日志", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
                 ft.Container(content=self.log_view,
-                             border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
-                             border_radius=4, padding=4, expand=True),
+                             bgcolor="#F5F7FA", border_radius=4, padding=6, expand=True),
             ], spacing=4),
-            padding=4,
+            padding=8, expand=True,
         ))
         self._restore_auto_potion_ui()
 
@@ -479,7 +500,7 @@ class HeroWorkshopApp:
             self._on_auto_potion_change()
         self._refs["auto_potion_dd"].on_change = on_auto_potion_change
 
-        return ft.Container(content=col, expand=True, padding=4, bgcolor=Cs("SURFACE_CONTAINER_LOWEST"))
+        return ft.Container(content=col, expand=True, padding=6, bgcolor=CLR_BODY_BG)
 
     def _init_hero_stats(self):
         for key, default in [
@@ -491,23 +512,28 @@ class HeroWorkshopApp:
             ("wpn_lbl", "武器: None"),
             ("arm_lbl", "护甲: None"),
         ]:
-            ctrl = self._ref(key, ft.Text(default, size=12))
+            ctrl = self._ref(key, ft.Text(default, size=F_BASE))
             self.hero_stats.controls.append(ctrl)
 
     # ─── Right Panel ─────────────────────────────────────────────
     def _build_right(self):
+        TABS = [
+            ("⚔ 武器", I.BUILD),
+            ("\U0001f6e1 护甲", I.SHIELD),
+            ("\U0001f381 杂货", I.REDEEM),
+            ("\U0001f392 背包", I.WORK),
+            ("⭐ 材料", I.DIAMOND),
+            ("\U0001f37a 酒馆", I.LOCAL_DRINK),
+            ("\U0001f331 农场", I.GRASS),
+            ("\U0001f3ed 工厂", I.FACTORY),
+            ("\U0001f43e 牧场", I.PETS),
+        ]
         self._tab_bar = ft.TabBar(
-            tabs=[
-                ft.Tab(label="⚔ 武器"),
-                ft.Tab(label="\U0001f6e1 护甲"),
-                ft.Tab(label="\U0001f381 杂货"),
-                ft.Tab(label="\U0001f392 背包"),
-                ft.Tab(label="⭐ 材料"),
-                ft.Tab(label="\U0001f37a 酒馆"),
-                ft.Tab(label="\U0001f331 农场"),
-                ft.Tab(label="\U0001f3ed 工厂"),
-                ft.Tab(label="\U0001f43e 牧场"),
-            ],
+            tabs=[ft.Tab(label, icon=icon) for label, icon in TABS],
+            scrollable=True,
+            indicator_color=CLR_PRIMARY,
+            label_color=CLR_PRIMARY,
+            unselected_label_color=Cs("GREY_500"),
         )
         self._tab_contents = [
             self._build_weapon_tab(),
@@ -523,10 +549,174 @@ class HeroWorkshopApp:
         self._tab_view = ft.TabBarView(controls=self._tab_contents, expand=True)
         self.right_tabs = ft.Tabs(
             content=ft.Column([self._tab_bar, self._tab_view], spacing=0, expand=True),
-            length=9,
+            length=10,
             expand=True,
         )
-        return self._ref("right_panel_ref", ft.Container(content=self.right_tabs, width=self._right_width, expand=True, padding=4))
+        return self._ref("right_panel_ref", ft.Container(
+            content=self.right_tabs, width=self._right_width, expand=True,
+            padding=ft.Padding.only(top=4, left=2, right=2, bottom=2),
+        ))
+
+    def _build_main_city_tab(self) -> ft.Stack:
+        """白玉京主城 — 仙侠地图质感 v2"""
+
+        CARD_W = 155
+        CARD_H = 138
+        ROW_SPACING = 14
+
+        # ── 配色 ───────────────────────────────────────────────────
+        BG_TOP = "#060E1C"
+        BG_MID = "#0A1E36"
+        BG_BOT = "#112244"
+        ACCENT = "#C8A44A"  # 金色
+        TEXT_W = "#D8EEFF"  # 主文字
+        TEXT_D = "#7AAAC8"  # 副文字
+        GLOW = "#1A6FCC"  # 蓝辉光
+
+        # ── Layer 1: 深蓝渐变背景 ──────────────────────────────────
+        bg = ft.Container(expand=True, gradient=ft.LinearGradient(
+            colors=[BG_TOP, BG_MID, BG_BOT],
+            begin=ft.alignment.Alignment(0, -1), end=ft.alignment.Alignment(0, 1)))
+
+        # ── Layer 2: 云雾层（Stack 内绝对定位 blob）─────────────────
+        def _blob(cx, cy, w, h, fill, radius_ratio=0.5):
+            """用圆角 Container 模拟云团 blob"""
+            return ft.Container(
+                left=cx - w * radius_ratio,
+                top=cy - h * radius_ratio,
+                width=w, height=h,
+                border_radius=int(min(w, h) * radius_ratio),
+                bgcolor=fill,
+            )
+
+        mist_layer = ft.Stack([
+            # 底层大雾团
+            _blob(80, 430, 260, 90, "#1A4080", 0.6),
+            _blob(380, 460, 220, 80, "#1A4080", 0.55),
+            _blob(700, 440, 280, 100, "#1A4080", 0.6),
+            _blob(900, 420, 200, 70, "#1A4080", 0.5),
+            # 中层雾气
+            _blob(160, 280, 180, 60, "#1E5090", 0.55),
+            _blob(480, 300, 200, 65, "#1E5090", 0.5),
+            _blob(760, 270, 170, 55, "#1E5090", 0.55),
+            # 顶层薄纱
+            _blob(280, 120, 150, 50, "#2560A8", 0.5),
+            _blob(620, 110, 180, 55, "#2560A8", 0.5),
+            # 散落光点（小星星）
+            _blob(50, 80, 6, 6, "#FFFFFF", 1.0),
+            _blob(210, 60, 5, 5, "#FFFFFF", 1.0),
+            _blob(450, 90, 6, 6, "#FFFFFF", 1.0),
+            _blob(600, 50, 4, 4, "#FFFFFF", 1.0),
+            _blob(840, 70, 5, 5, "#FFFFFF", 1.0),
+            _blob(950, 55, 6, 6, "#FFFFFF", 1.0),
+            _blob(1000, 95, 4, 4, "#FFFFFF", 1.0),
+        ])
+
+        # ── 建筑卡片 ───────────────────────────────────────────────
+        def _card(name, subtitle, icon, accent_color):
+            """单个建筑入口卡片"""
+            badge = ft.Container(
+                content=ft.Text(icon, size=28),
+                alignment=ft.alignment.Alignment(0,0),
+                padding=8,
+            )
+            # 卡片本体
+            card = ft.Container(
+                content=ft.Column([
+                    badge,
+                    ft.Text(name, size=13, weight=ft.FontWeight.W_600, color=accent_color),
+                    ft.Text(subtitle, size=9, color=TEXT_D, text_align=ft.TextAlign.CENTER,
+                            max_lines=2),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=3),
+                width=CARD_W, height=CARD_H,
+                padding=8,
+                border_radius=16,
+                bgcolor="#0A1E3A",
+                border=ft.Border(
+                    ft.BorderSide(1, "#1E4070"),
+                    ft.BorderSide(1, "#1E4070"),
+                    ft.BorderSide(2, accent_color + "60"),
+                    ft.BorderSide(1, "#1E4070"),
+                ),
+                # 外发光：多层 shadow 叠加
+                shadow=ft.BoxShadow(blur_radius=20, color=accent_color + "30", offset=ft.Offset(0, 0)),
+            )
+
+            # 悬停效果
+            def _on_hover(e):
+                if e.data == "true":
+                    card.bgcolor = "#0E2860"
+                    card.shadow = ft.BoxShadow(blur_radius=30, color=accent_color + "50", offset=ft.Offset(0, 0))
+                    card.border = ft.Border(
+                        ft.BorderSide(1, "#1E4070"),
+                        ft.BorderSide(1, "#1E4070"),
+                        ft.BorderSide(3, accent_color + "CC"),
+                        ft.BorderSide(1, "#1E4070"),
+                    )
+                else:
+                    card.bgcolor = "#0A1E3A"
+                    card.shadow = ft.BoxShadow(blur_radius=20, color=accent_color + "30", offset=ft.Offset(0, 0))
+                    card.border = ft.Border(
+                        ft.BorderSide(1, "#1E4070"),
+                        ft.BorderSide(1, "#1E4070"),
+                        ft.BorderSide(2, accent_color + "60"),
+                        ft.BorderSide(1, "#1E4070"),
+                    )
+                card.update()
+
+            card.on_hover = _on_hover
+            return card
+
+        # ── 建筑数据 ──────────────────────────────────────────────
+        buildings = [
+            # row 0: 北天门 + 中天殿
+            dict(name="北天门", subtitle="踏云归上界\n入阙即仙乡", icon="🚪", accent_color="#60A8E0"),
+            dict(name="中天殿", subtitle="四海仙朋聚\n八方消息来", icon="🏛", accent_color="#80C8A0"),
+            # row 1: 璇玑阁 + 仙禽阁 + 天工坊
+            dict(name="璇玑阁", subtitle="万宝归璇玑\n珍奇入画图", icon="💎", accent_color="#D8A0E8"),
+            dict(name="仙禽阁", subtitle="灵兽栖云阁\n奇珍上玉台", icon="🦅", accent_color="#60E8A0"),
+            dict(name="天工坊", subtitle="炉火淬神器\n天工炼奇珍", icon="⚒", accent_color="#E8A060"),
+            # row 2: 瑶池宫 + 藏珍洞 + 聚元阁 + 如梦令
+            dict(name="瑶池宫", subtitle="瑶池洗尘虑\n玉露润仙心", icon="🛁", accent_color="#60E8E8"),
+            dict(name="藏珍洞", subtitle="洞纳乾坤物\n囊藏千万珍", icon="💰", accent_color="#E8D060"),
+            dict(name="聚元阁", subtitle="聚元凝宝气\n炼器铸锋芒", icon="⬆", accent_color="#E86060"),
+            dict(name="如梦令", subtitle="一枕清梦远\n半世从头来", icon="🛏", accent_color="#C8A8E8"),
+        ]
+
+        def _card_row(indices):
+            return ft.Row(
+                [ft.Container(_card(**buildings[i]), margin=6) for i in indices],
+                spacing=0, alignment=ft.MainAxisAlignment.CENTER,
+            )
+
+        # ── 顶部题字 ─────────────────────────────────────────────
+        title_bar = ft.Container(
+            content=ft.Column([
+                ft.Text("白玉京阙", size=26, weight=ft.FontWeight.BOLD,
+                        color=ACCENT, font_family="SimHei"),
+                ft.Text("白玉为阶云为伴，仙友初临白玉京",
+                        size=10, color=TEXT_D, italic=True),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
+            alignment=ft.alignment.Alignment(0, -1),
+            padding=ft.padding.only(top=14, bottom=8),
+        )
+
+        # ── 底部注释 ─────────────────────────────────────────────
+        footer = ft.Container(
+            content=ft.Text("点击建筑进入对应功能", size=9, color=TEXT_D + "80"),
+            alignment=ft.alignment.Alignment(0, 1),
+            padding=ft.padding.only(bottom=12),
+        )
+
+        # ── 组装 Stack ───────────────────────────────────────────
+        content = ft.Column([title_bar, _card_row([0, 1]), _card_row([2, 3, 4]), _card_row([5, 6, 7, 8]), footer],
+                            spacing=ROW_SPACING, alignment=ft.MainAxisAlignment.START)
+
+        stack = ft.Stack(
+            controls=[bg, mist_layer, content],
+        )
+        stack.expand = True
+        return stack
 
     def _build_weapon_tab(self):
         items = []
@@ -534,11 +724,16 @@ class HeroWorkshopApp:
             crit = f" CRIT{w['crit_rate']}%" if w["crit_rate"] > 0 else ""
             ridx = min(idx // 4, 4)
             color = RARITY_COLORS[ridx]
-            items.append(ft.ListTile(
-                title=ft.Text(f"{w['name']}  ATK:{w['attack']}{crit}", size=13, color=color, weight=ft.FontWeight.W_500),
-                subtitle=ft.Text(cost_str(w["cost"]), size=11, color=Cs("GREY_500")),
-                trailing=ft.IconButton(icon=I.SHOPPING_CART,
-                                       on_click=lambda e, wpn=w: self._buy_weapon(wpn)),
+            items.append(ft.Container(
+                content=ft.Row([
+                    ft.Column([
+                        ft.Text(f"{w['name']}  ATK:{w['attack']}{crit}", size=F_BASE, color=color, weight=ft.FontWeight.W_500),
+                        ft.Text(cost_str(w["cost"]), size=F_XS, color=Cs("GREY_500")),
+                    ], spacing=2, expand=True),
+                    ft.IconButton(icon=I.SHOPPING_CART, icon_size=18,
+                                  on_click=lambda e, wpn=w: self._buy_weapon(wpn)),
+                ], spacing=4),
+                padding=ft.Padding.only(left=8, right=4, top=4, bottom=4),
             ))
         return ft.ListView(items, spacing=2, expand=True)
 
@@ -548,11 +743,16 @@ class HeroWorkshopApp:
             hp = f" HP+{a['hp_bonus']}" if a["hp_bonus"] > 0 else ""
             ridx = min(idx // 4, 4)
             color = RARITY_COLORS[ridx]
-            items.append(ft.ListTile(
-                title=ft.Text(f"{a['name']}  DEF:{a['defense']}{hp}", size=13, color=color, weight=ft.FontWeight.W_500),
-                subtitle=ft.Text(cost_str(a["cost"]), size=11, color=Cs("GREY_500")),
-                trailing=ft.IconButton(icon=I.SHOPPING_CART,
-                                       on_click=lambda e, arm=a: self._buy_armor(arm)),
+            items.append(ft.Container(
+                content=ft.Row([
+                    ft.Column([
+                        ft.Text(f"{a['name']}  DEF:{a['defense']}{hp}", size=F_BASE, color=color, weight=ft.FontWeight.W_500),
+                        ft.Text(cost_str(a["cost"]), size=F_XS, color=Cs("GREY_500")),
+                    ], spacing=2, expand=True),
+                    ft.IconButton(icon=I.SHOPPING_CART, icon_size=18,
+                                  on_click=lambda e, arm=a: self._buy_armor(arm)),
+                ], spacing=4),
+                padding=ft.Padding.only(left=8, right=4, top=4, bottom=4),
             ))
         return ft.ListView(items, spacing=2, expand=True)
 
@@ -561,49 +761,50 @@ class HeroWorkshopApp:
         for item in sorted(NOVELTY_ITEMS, key=lambda x: x["price"]):
             ridx = min(item.get("rarity_idx", 0), 4)
             color = NOVELTY_RARITY_COLORS[ridx]
-            items.append(ft.ListTile(
-                title=ft.Text(item["name"], size=12, color=color, weight=ft.FontWeight.BOLD),
-                subtitle=ft.Text(f"{NOVELTY_RARITY_NAMES[ridx]} \xb7 {item['desc']}", size=11),
-                trailing=ft.Text(f"{item['price']}G", size=12, weight=ft.FontWeight.BOLD),
+            items.append(ft.Container(
+                content=ft.Row([
+                    ft.Column([
+                        ft.Text(item["name"], size=F_BASE, color=color, weight=ft.FontWeight.BOLD),
+                        ft.Text(f"{NOVELTY_RARITY_NAMES[ridx]} \xb7 {item['desc']}", size=F_XS, color=Cs("GREY_500")),
+                    ], spacing=2, expand=True),
+                    ft.Text(f"{item['price']}G", size=F_MD, weight=ft.FontWeight.BOLD, color=CLR_ACCENT),
+                ], spacing=4),
+                padding=ft.Padding.only(left=8, right=8, top=5, bottom=5),
                 on_click=lambda e, it=item: self._buy_novelty(it),
             ))
         return ft.ListView(items, spacing=2, expand=True)
 
 
     def _build_bag_tab(self):
-        # 标题行
-        self._ref("bag_count_lbl", ft.Text("背包: 0/20", size=13, weight=ft.FontWeight.BOLD))
+        self._ref("bag_count_lbl", ft.Text("背包: 0/20", size=F_BASE, weight=ft.FontWeight.BOLD))
         title_row = ft.Row([
             self._refs["bag_count_lbl"],
             ft.Container(expand=True),
-            ft.Text("点击装备名笱打拔或卖出", size=11, color=Cs("GREY_500")),
+            ft.Text("点击装备/使用 | 右键卖出", size=F_XS, color=Cs("GREY_500")),
         ], spacing=8)
 
-        # 当前装备区
-        equip_ctr = ft.Column([
-            ft.Text("-- 当前装备 --", size=13, weight=ft.FontWeight.BOLD),
+        equip_ctr = styled_card(ft.Column([
+            ft.Text("当前装备", size=F_BASE, weight=ft.FontWeight.BOLD, color="#37474F"),
             ft.Row([
-                self._ref("eq_weapon_lbl", ft.Text("武器: 未装备", size=12)),
+                self._ref("eq_weapon_lbl", ft.Text("武器: 未装备", size=F_BASE)),
                 ft.Container(expand=True),
-                self._ref("eq_armor_lbl", ft.Text("护甲: 未装备", size=12)),
+                self._ref("eq_armor_lbl", ft.Text("护甲: 未装备", size=F_BASE)),
             ], spacing=12),
-        ], spacing=4)
+        ], spacing=4), padding=ft.Padding.only(left=8, right=8, top=6, bottom=6), accent_left=CLR_PRIMARY)
 
-        # 背包格子 grid (4x5)
         self._bag_cells = []
         bag_grid = ft.GridView(
-            child_aspect_ratio=3.5,
-            spacing=4,
+            child_aspect_ratio=3.8,
+            spacing=3,
             padding=4,
         )
         for i in range(20):
-            ridx = i  # will be updated by _refresh_bag
             cell = ft.Container(
                 content=ft.Column([
-                    self._ref(f"bag_lbl_{i}", ft.Text("空", size=11, color=Cs("GREY_500"), text_align="center")),
+                    self._ref(f"bag_lbl_{i}", ft.Text("空", size=F_XS, color=Cs("GREY_500"), text_align="center")),
                     ft.Row([
-                        self._ref(f"bag_e_{i}", ft.Text("装", size=10)),
-                        self._ref(f"bag_s_{i}", ft.Text("卖", size=10)),
+                        self._ref(f"bag_e_{i}", ft.Text("装", size=F_XS)),
+                        self._ref(f"bag_s_{i}", ft.Text("卖", size=F_XS)),
                     ], spacing=2, alignment=ft.MainAxisAlignment.CENTER),
                 ], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
                 border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
@@ -611,18 +812,17 @@ class HeroWorkshopApp:
                 padding=4,
                 ink=True,
             )
-            # Store idx in bgcolor for use in callbacks
             cell.data = i
             cell.on_click = lambda e, idx=i: self._bag_cell_click(idx)
             self._bag_cells.append(cell)
             bag_grid.controls.append(cell)
 
-        return ft.ListView([
+        return ft.Column([
             title_row,
             equip_ctr,
-            ft.Divider(),
+            ft.Container(height=4),
             bag_grid,
-        ], spacing=6, expand=True)
+        ], spacing=4, expand=True)
 
     def _refresh_bag(self):
         inv = self.game.get_current_member().get_inventory()
@@ -699,36 +899,24 @@ class HeroWorkshopApp:
         self._refresh_all_ui()
 
     def _build_materials_tab(self):
-        # 材料类型: Wood, Iron, Leather, Stone
-        mat_rows = []
         mats = ["木材", "铁矿", "皮革", "石头"]
+        mat_icons = ["\U0001f332", "⛏️", "\U0001f9e4", "⛰️"]
         mat_buy_prices = {"木材": 4, "铁矿": 6, "皮革": 4, "石头": 2}
         mat_sell_prices = {"木材": 2, "铁矿": 3, "皮革": 2, "石头": 1}
-        self._mat_buy_btns = {}
-        self._mat_sell_btns = {}
-        for mat in mats:
-            ctr = ft.Container(
-                content=ft.Column([
-                    ft.Row([
-                        ft.Text(mat, size=13, weight=ft.FontWeight.BOLD),
-                        self._ref(f"mat_{mat}_cnt", ft.Text("x0", size=12, color=Cs("GREY_400"))),
-                    ], spacing=8),
-                    ft.Row([
-                        ft.Text(f"卖: {mat_sell_prices[mat]}G / 买: {mat_buy_prices[mat]}G", size=11, color=Cs("GREY_500")),
-                    ], spacing=12),
-                    ft.Row([
-                        self._ref(f"mat_{mat}_buy_10", ft.Button(f"买10({mat_buy_prices[mat]*10}G)", scale=0.75, on_click=lambda e, m=mat: self._buy_mat(m, 10))),
-                        self._ref(f"mat_{mat}_sell_10", ft.Button(f"卖10({mat_sell_prices[mat]*10}G)", scale=0.75, on_click=lambda e, m=mat: self._sell_mat(m, 10))),
-                    ], spacing=6),
-                ], spacing=4),
-                border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
-                border_radius=6,
-                padding=8,
-            )
-            self._ref(f"mat_{mat}_ctr", ctr)
-            mat_rows.append(ctr)
-
-        return ft.ListView(mat_rows, spacing=8, padding=8, expand=True)
+        mat_rows = []
+        for mat, icon in zip(mats, mat_icons):
+            mat_rows.append(styled_card(ft.Column([
+                ft.Row([
+                    ft.Text(f"{icon} {mat}", size=F_MD, weight=ft.FontWeight.BOLD),
+                    self._ref(f"mat_{mat}_cnt", ft.Text("x0", size=F_BASE, color=Cs("GREY_500"))),
+                ], spacing=8),
+                ft.Text(f"卖 {mat_sell_prices[mat]}G / 买 {mat_buy_prices[mat]}G", size=F_XS, color=Cs("GREY_500")),
+                ft.Row([
+                    ft.Button(f"买10 ({mat_buy_prices[mat]*10}G)", scale=0.75, on_click=lambda e, m=mat: self._buy_mat(m, 10)),
+                    ft.Button(f"卖10 ({mat_sell_prices[mat]*10}G)", scale=0.75, on_click=lambda e, m=mat: self._sell_mat(m, 10)),
+                ], spacing=6),
+            ], spacing=4), padding=10))
+        return ft.ListView(mat_rows, spacing=8, expand=True)
 
     def _buy_mat(self, mat, amount):
         ok, msg = self.game.buy_material(mat, amount)
@@ -750,30 +938,24 @@ class HeroWorkshopApp:
 
     def _build_tavern_tab(self):
         self._ref("tavern_gold_lbl",
-                  ft.Text("\U0001fa99 100G", size=13, weight=ft.FontWeight.BOLD))
-        self._ref("tavern_timer_lbl", ft.Text("刷新: --:--", size=12))
+                  ft.Text("\U0001fa99 100G", size=F_MD, weight=ft.FontWeight.BOLD))
+        self._ref("tavern_timer_lbl", ft.Text("刷新: --:--", size=F_SM))
         self._ref("tavern_roster_ctr", ft.Column([], spacing=4, scroll="auto"))
         self._ref("team_manage_ctr", ft.Column([], spacing=4, scroll="auto"))
         ctr = ft.Column([
-            ft.Container(
-                content=ft.Row([
-                    self._refs["tavern_gold_lbl"],
-                    self._refs["tavern_timer_lbl"],
-                    ft.Container(expand=True),
-                    ft.Button("\U0001f504 刷新 (50G)", scale=0.85,
-                                       on_click=self._tavern_refresh),
-                ], spacing=8),
-                padding=6, bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
-            ),
-            ft.Text("-- 可招募角色 --",
-                    size=13, weight=ft.FontWeight.BOLD),
+            styled_card(ft.Row([
+                self._refs["tavern_gold_lbl"],
+                self._refs["tavern_timer_lbl"],
+                ft.Container(expand=True),
+                ft.Button("\U0001f504 刷新 (50G)", scale=0.85, on_click=self._tavern_refresh),
+            ], spacing=8), padding=8),
+            ft.Text("可招募角色", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
             self._refs["tavern_roster_ctr"],
-            ft.Divider(),
-            ft.Text("-- 队伍管理 --",
-                    size=13, weight=ft.FontWeight.BOLD),
+            divider_h(),
+            ft.Text("队伍管理", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
             self._refs["team_manage_ctr"],
-        ], scroll="auto", spacing=4)
-        return ft.Container(content=ctr, padding=6)
+        ], scroll="auto", spacing=6)
+        return ft.Container(content=ctr)
 
     def _build_farm_tab(self):
         self._ref("farm_count_lbl", ft.Text("\U0001f331 我的农场: 0/10", size=13))
@@ -793,16 +975,11 @@ class HeroWorkshopApp:
             )
         ctr = ft.Column([
             self._refs["farm_count_lbl"],
-            ft.Container(content=self._refs["farm_plants_ctr"],
-                         border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
-                         border_radius=4, padding=4, height=180),
-            ft.Text("-- 种子商店 --",
-                    size=13, weight=ft.FontWeight.BOLD),
-            ft.Container(content=self._refs["farm_seeds_ctr"],
-                         border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
-                         border_radius=4, padding=4, expand=True),
-        ], scroll="auto", spacing=4)
-        return ft.Container(content=ctr, padding=6)
+            styled_card(ft.Container(content=self._refs["farm_plants_ctr"], height=180), padding=6),
+            ft.Text("种子商店", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
+            styled_card(self._refs["farm_seeds_ctr"], padding=6, expand=True),
+        ], scroll="auto", spacing=6)
+        return ft.Container(content=ctr)
 
     def _build_ranch_tab(self):
         """牧场Tab: 商店区 / 牧场库存 / 产出仓库"""
@@ -841,49 +1018,29 @@ class HeroWorkshopApp:
         self._ref("ranch_warehouse_lbl", ft.Text("📦 产出仓库", size=13, weight=ft.FontWeight.BOLD))
 
         ctr = ft.Column([
-            # 标题+金币
-            ft.Container(
-                content=ft.Row([
-                    self._refs["ranch_inventory_lbl"],
-                    ft.Container(expand=True),
-                    self._ref("ranch_gold_lbl", ft.Text("💰 100G", size=13, color=ft.Colors.AMBER_700)),
-                ], spacing=8),
-                padding=ft.Padding.only(bottom=4),
-            ),
-            # 库存区
-            ft.Container(
-                content=self._refs["ranch_inventory_ctr"],
-                border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
-                border_radius=4, padding=4, height=200,
-            ),
-            ft.Divider(),
-            # 仓库区
-            self._refs["ranch_warehouse_lbl"],
-            ft.Container(
-                content=self._refs["ranch_warehouse_ctr"],
-                border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
-                border_radius=4, padding=4, expand=True,
-            ),
-            ft.Divider(),
-            # 商店区
-            ft.Container(
-                content=ft.ListView([shop_ctr], spacing=2, expand=True),
-                border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
-                border_radius=4, padding=4, height=220,
-            ),
-        ], scroll="auto", spacing=4)
-        return ft.Container(content=ctr, padding=6)
+            styled_card(ft.Row([
+                self._refs["ranch_inventory_lbl"],
+                ft.Container(expand=True),
+                self._ref("ranch_gold_lbl", ft.Text("\U0001fa99 100G", size=F_MD, color=CLR_ACCENT)),
+            ], spacing=8), padding=8),
+            styled_card(ft.Container(content=self._refs["ranch_inventory_ctr"], height=200), padding=6),
+            ft.Text("产出仓库", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
+            styled_card(self._refs["ranch_warehouse_ctr"], padding=6, expand=True),
+            ft.Text("生物商店", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
+            styled_card(ft.ListView([shop_ctr], spacing=2, expand=True), padding=6, expand=True),
+        ], scroll="auto", spacing=6)
+        return ft.Container(content=ctr)
 
     def _build_factory_tab(self):
         self._ref("factory_status_lbl",
-                  ft.Text("\U0001f3ed 未建造", size=13, color=ft.Colors.RED))
+                  ft.Text("\U0001f3ed 未建造", size=F_MD, color=ft.Colors.RED))
         self._ref("factory_info_lbl",
-                  ft.Text("建造费用: " + ", ".join(f"{k}{v}" for k, v in FACTORY_BUILD_COST.items()) + "  |  基础利润: 50G/5min", size=11))
+                  ft.Text("建造费用: " + ", ".join(f"{k}{v}" for k, v in FACTORY_BUILD_COST.items()) + "  |  基础利润: 50G/5min", size=F_SM))
         self._ref("factory_build_btn",
                   ft.Button("\U0001f3d7 建造工厂", on_click=self._build_factory_tab_action))
         self._ref("factory_depts_ctr", ft.Column([], spacing=4))
         self._ref("factory_workers_lbl",
-                  ft.Text("劳工: 0/5  (每人+15%, 80G/人)", size=12))
+                  ft.Text("劳工: 0/5  (每人+15%, 80G/人)", size=F_BASE))
 
         for dept in FACTORY_DEPTS:
             if dept["id"] == "basic":
@@ -892,51 +1049,52 @@ class HeroWorkshopApp:
             if dept["cost_resources"]:
                 cost_str += ", " + ", ".join(f"{k}{v}" for k, v in dept["cost_resources"].items())
             self._ref(f"dept_card_{dept['id']}",
-                      ft.Container(
-                          content=ft.Column([
-                              ft.Row([
-                                  ft.Text(f"{dept['name']}", size=12, weight=ft.FontWeight.BOLD, expand=True),
-                                  self._ref(f"dept_status_{dept['id']}", ft.Text("未解锁", size=11, color=ft.Colors.RED)),
-                              ], tight=True),
-                              ft.Text(f"{dept['desc']}  |  费用: {cost_str}", size=10, color=Cs("GREY_600")),
-                              self._ref(f"dept_btn_{dept['id']}",
-                                        ft.Button(f"解锁 {dept['name']}", scale=0.8,
-                                                  on_click=lambda e, d=dept["id"]: self._buy_dept(d))),
-                          ], spacing=2),
-                          padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
-                          border_radius=4, bgcolor="#fafafa"))
+                      styled_card(ft.Column([
+                          ft.Row([
+                              ft.Text(f"{dept['name']}", size=F_BASE, weight=ft.FontWeight.BOLD, expand=True),
+                              self._ref(f"dept_status_{dept['id']}", ft.Text("未解锁", size=F_SM, color=ft.Colors.RED)),
+                          ], tight=True),
+                          ft.Text(f"{dept['desc']}  |  费用: {cost_str}", size=F_XS, color=Cs("GREY_600")),
+                          self._ref(f"dept_btn_{dept['id']}",
+                                    ft.Button(f"解锁 {dept['name']}", scale=0.8,
+                                              on_click=lambda e, d=dept["id"]: self._buy_dept(d))),
+                      ], spacing=2), padding=6))
             self._refs["factory_depts_ctr"].controls.append(self._refs[f"dept_card_{dept['id']}"])
 
         ctr = ft.Column([
             self._refs["factory_status_lbl"],
             self._refs["factory_info_lbl"],
             self._refs["factory_build_btn"],
-            ft.Divider(),
-            ft.Text("-- 部门 --", size=13, weight=ft.FontWeight.BOLD),
-            ft.Container(content=self._refs["factory_depts_ctr"],
-                         border=ft.Border.all(1, Cs("OUTLINE_VARIANT")),
-                         border_radius=4, padding=4),
-            ft.Divider(),
+            divider_h(),
+            ft.Text("部门", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
+            self._refs["factory_depts_ctr"],
+            divider_h(),
             self._refs["factory_workers_lbl"],
             ft.Row([
                 ft.Button("+ 雇佣", scale=0.85, on_click=self._hire_factory_worker),
                 ft.Button("- 解雇", scale=0.85, on_click=self._fire_factory_worker),
             ], spacing=8),
-        ], scroll="auto", spacing=4)
-        return ft.Container(content=ctr, padding=6)
+        ], scroll="auto", spacing=6)
+        return ft.Container(content=ctr)
 
     # ─── Bottom Bar ──────────────────────────────────────────────
     def _build_bottom_bar(self):
+        BTN_STYLE = ft.ButtonStyle(
+            bgcolor=CLR_PRIMARY, color=ft.Colors.WHITE,
+            padding=ft.Padding.only(left=16, right=16, top=8, bottom=8),
+        )
         self.page.add(ft.Container(
             content=ft.Row([
                 ft.Container(expand=True),
-                ft.Button("\U0001f4be 存档", on_click=self._save),
-                ft.Button("\U0001f4c2 读档", on_click=self._load),
-                ft.Button("📖 图鉴", on_click=self._show_codex),
-                ft.Button("❓ 帮助", on_click=self._show_help),
+                ft.Button("\U0001f4be 存档", on_click=self._save, style=BTN_STYLE),
+                ft.Button("\U0001f4c2 读档", on_click=self._load, style=BTN_STYLE),
+                ft.Button("📖 图鉴", on_click=self._show_codex, style=BTN_STYLE),
+                ft.Button("❓ 帮助", on_click=self._show_help, style=BTN_STYLE),
                 ft.Container(expand=True),
-            ], spacing=8),
-            padding=4, border=ft.Border.only(top=ft.BorderSide(color=Cs("OUTLINE_VARIANT"))),
+            ], spacing=12),
+            padding=ft.Padding.only(top=8, bottom=8, left=12, right=12),
+            bgcolor="#FFFFFF",
+            border=ft.Border.only(top=ft.BorderSide(color="#E0E0E0", width=1)),
         ))
 
     # ─── Update Loop ────────────────────────────────────────────
@@ -963,7 +1121,7 @@ class HeroWorkshopApp:
     def _refresh_log(self):
         self.log_view.controls.clear()
         for msg in self.game.logs[-60:]:
-            self.log_view.controls.append(ft.Text(msg, size=11))
+            self.log_view.controls.append(ft.Text(msg, size=F_SM))
         try:
             self.page.update()
         except Exception:
@@ -985,11 +1143,11 @@ class HeroWorkshopApp:
         for i, btn in enumerate(self.team_btns):
             if i < len(team):
                 m = team[i]
-                btn.content = ft.Text(f"{m.role_name}\nLv.{m.level}", size=14, weight=ft.FontWeight.W_500)
+                btn.content = ft.Text(f"{m.role_name}\nLv.{m.level}", size=F_MD, weight=ft.FontWeight.W_500)
                 bg = Cs("ORANGE_600") if i == g.current_member_idx else (Cs("GREEN_600") if i == 0 else Cs("DEEP_PURPLE_600"))
-                btn.style = ft.ButtonStyle(bgcolor=bg)
+                btn.style = ft.ButtonStyle(bgcolor=bg, color=ft.Colors.WHITE)
             else:
-                btn.content = ft.Text("空位", size=14, weight=ft.FontWeight.W_500)
+                btn.content = ft.Text("空位", size=F_MD, weight=ft.FontWeight.W_500)
                 btn.style = ft.ButtonStyle(bgcolor=Cs("GREY_600"))
 
         max_hp = p.get_max_hp_with_bonus()
@@ -1009,11 +1167,11 @@ class HeroWorkshopApp:
             btn = self._refs.get(f"map_btn_{mname}")
             if btn:
                 if mname in g.unlocked_maps:
-                    btn.content = ft.Text(mname, size=14, weight=ft.FontWeight.W_500)
+                    btn.content = ft.Text(mname, size=F_MD, weight=ft.FontWeight.W_500)
                     btn.style = ft.ButtonStyle(bgcolor=Cs("GREEN_600"), color=ft.Colors.WHITE)
                 else:
                     cost = get_all_maps()[mname].get("unlock_cost", 0)
-                    btn.content = ft.Text(f"{mname}({cost}G)", size=14, weight=ft.FontWeight.W_500)
+                    btn.content = ft.Text(f"{mname}({cost}G)", size=F_MD, weight=ft.FontWeight.W_500)
                     btn.style = ft.ButtonStyle(bgcolor=Cs("GREY_600"), color=ft.Colors.WHITE)
 
         e = g.current_enemy
@@ -1027,16 +1185,16 @@ class HeroWorkshopApp:
 
         self._refs["battle_btn"].disabled = g.is_battling
         self._refs["battle_btn"].content = ft.Text(
-            "战中..." if g.is_battling else "⚔ 战斗", size=13)
+            "战中..." if g.is_battling else "⚔ 战斗", size=F_MD)
         self._refs["auto_status_lbl"].value = "自动: 开" if g.auto_battle else "自动: 关"
         self._refs["auto_status_lbl"].color = ft.Colors.GREEN_600 if g.auto_battle else Cs("GREY_500")
         self._refs["auto_btn"].content = ft.Text(
-            "⏹ 停止" if g.auto_battle else "⚡ 自动战斗", size=12)
+            "⏹ 停止" if g.auto_battle else "⚡ 自动战斗", size=F_BASE)
         self._refs["auto_btn"].style = ft.ButtonStyle(
             bgcolor=Cs("RED_600") if g.auto_battle else Cs("ORANGE_600"))
         self._refs["potions_lbl"].value = f"\U0001f9ea 药水: x{p.potions}"
 
-        # 建筑实例卡片列表（重新构建）
+        # 建筑实例卡片列表(重新构建)
         for bname in get_all_building_names():
             levels = g.building_levels.get(bname, [])
             cnt_ref = self._refs.get(f"bld_count_{bname}")
@@ -1154,17 +1312,16 @@ class HeroWorkshopApp:
             for ch in roster:
                 cost = ch.get("cost", g.player.level * 100)
                 wn = ch.get("weapon", {}).get("name", "无") if ch.get("weapon") else "无"
-                rctr.controls.append(ft.Container(
-                    content=ft.Column([
-                        ft.Row([
-                            ft.Text(f"{ch.get('role_name','?')} Lv.{ch.get('level',1)}", size=12, weight=ft.FontWeight.BOLD, expand=True),
-                            ft.Text(f"{cost}G", size=12, color=ft.Colors.AMBER_700),
-                        ], tight=True),
-                        ft.Text(f"武器: {wn}", size=10, color=Cs("GREY_600")),
-                        ft.Button("招募", scale=0.8, on_click=lambda e, c=ch: self._recruit_member(c)),
-                    ], spacing=2), padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4))
+                rctr.controls.append(styled_card(ft.Column([
+                    ft.Row([
+                        ft.Text(f"{ch.get('role_name','?')} Lv.{ch.get('level',1)}", size=F_BASE, weight=ft.FontWeight.BOLD, expand=True),
+                        ft.Text(f"{cost}G", size=F_BASE, color=CLR_ACCENT),
+                    ], tight=True),
+                    ft.Text(f"武器: {wn}", size=F_XS, color=Cs("GREY_600")),
+                    ft.Button("招募", scale=0.8, on_click=lambda e, c=ch: self._recruit_member(c)),
+                ], spacing=2), padding=6))
             if not roster:
-                rctr.controls.append(ft.Text("暂无可招募角色", size=12, color=Cs("GREY_500")))
+                rctr.controls.append(ft.Text("暂无可招募角色", size=F_BASE, color=Cs("GREY_500")))
         # 队伍管理列表
         tctr = self._refs.get("team_manage_ctr")
         if tctr:
@@ -1172,18 +1329,16 @@ class HeroWorkshopApp:
             team = g.get_team()
             for i, m in enumerate(team):
                 tag = " ★队长" if i == 0 else f" #{i}"
-                wn = m.weapon["name"] if m.weapon and isinstance(m.weapon, dict) else "无"
-                tctr.controls.append(ft.Container(
-                    content=ft.Row([
-                        ft.Text(f"{m.role_name} Lv.{m.level}{tag}", size=12, weight=ft.FontWeight.BOLD, expand=True),
-                        ft.Text(f"HP:{m.hp}/{m.get_max_hp_with_bonus()}", size=11),
-                        ft.Button("切换", scale=0.75,
-                                  on_click=lambda e, idx=i: self._switch_to(idx)) if i != g.current_member_idx else None,
-                        ft.Button("踢出", scale=0.75,
-                                  on_click=lambda e, idx=i: self._kick_member_ui(idx)) if i > 0 else None,
-                    ], spacing=4, alignment=ft.alignment.Alignment(-1, 0)),
-                    padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4,
-                    bgcolor="#fff8e1" if i == g.current_member_idx else None))
+                tctr.controls.append(styled_card(ft.Row([
+                    ft.Text(f"{m.role_name} Lv.{m.level}{tag}", size=F_BASE, weight=ft.FontWeight.BOLD, expand=True),
+                    ft.Text(f"HP:{m.hp}/{m.get_max_hp_with_bonus()}", size=F_SM),
+                    ft.Button("切换", scale=0.75,
+                              on_click=lambda e, idx=i: self._switch_to(idx)) if i != g.current_member_idx else None,
+                    ft.Button("踢出", scale=0.75,
+                              on_click=lambda e, idx=i: self._kick_member_ui(idx)) if i > 0 else None,
+                ], spacing=4, alignment=ft.alignment.Alignment(-1, 0)),
+                padding=6, accent_left="#FFA726" if i == g.current_member_idx else None,
+                ))
 
         # 刷新牧场
         inv_ctr = self._refs.get("ranch_inventory_ctr")
@@ -1430,65 +1585,14 @@ class HeroWorkshopApp:
 
     # ─── Save / Load ────────────────────────────────────────────
     def _save(self, e=None):
-        data = {
-            "resources": self.game.resources,
-            "buildings": self.game.buildings,
-            "building_levels": self.game.building_levels,
-            "building_workers": self.game.building_workers,
-            "player": self.game.player.to_dict(),
-            "current_map": self.game.current_map,
-            "unlocked_maps": list(self.game.unlocked_maps),
-            "current_enemy_idx": self.game.current_enemy_idx,
-            "wonders": list(self.game.wonders.keys()),
-            "plants": self.game.plants,
-            "factory": self.game.factory,
-            "factory_departments": self.game.factory_departments,
-            "factory_workers": self.game.factory_workers,
-            "factory_last_profit_time": getattr(self.game, "factory_last_profit_time", 0),
-            "auto_potion_threshold": self.game.auto_potion_threshold,
-            "team": self.game.team_to_dict(),
-            "tavern": self.game.tavern_to_dict(),
-            "codex": self.game.codex.to_dict(),
-            "ranch": self.game.ranch.to_dict(),
-            "current_member_idx": self.game.current_member_idx,
-            "mutated_plants": self.game.mutated_plants,
-        }
-        with open(SAVE_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        self.game.save_to_file(SAVE_PATH)
         self.game.add_log(f"\U0001f4be 已存档!")
         self._show_toast("存档成功!")
 
     def _load(self, e=None):
-        if not os.path.exists(SAVE_PATH):
+        if not self.game.load_from_file(SAVE_PATH):
             self.game.add_log("没有存档文件!")
             return
-        with open(SAVE_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        self.game.resources = data.get("resources", {})
-        self.game.buildings = data.get("buildings", {})
-        self.game.building_levels = data.get("building_levels", {})
-        self.game.building_workers = data.get("building_workers", {})
-        self.game.player.from_dict(data.get("player", {}))
-        self.game.current_map = data.get("current_map", "傲来国")
-        self.game.unlocked_maps = set(data.get("unlocked_maps", ["傲来国"]))
-        self.game.current_enemy_idx = data.get("current_enemy_idx", 0)
-        self.game.wonders = {n: True for n in data.get("wonders", [])}
-        self.game.plants = data.get("plants", [])
-        self.game.factory = data.get("factory")
-        self.game.factory_departments = data.get("factory_departments",
-                                                  ["basic"] if data.get("factory") else [])
-        self.game.factory_workers = data.get("factory_workers", 0)
-        self.game.factory_last_profit_time = data.get("factory_last_profit_time", 0)
-        self.game.auto_potion_threshold = data.get("auto_potion_threshold", 0)
-        self.game.team_from_dict(data.get("team", []))
-        self.game.tavern_from_dict(data.get("tavern", []))
-        self.game.codex.from_dict(data.get("codex", {}))
-        self.game.ranch.from_dict(data.get("ranch", {}))
-        self.game.current_member_idx = data.get("current_member_idx", 0)
-        self.game.mutated_plants = data.get("mutated_plants", {})
-        for name, levels in self.game.building_levels.items():
-            for idx in range(len(levels)):
-                self.game.start_building_production(name, idx)
         self.game.add_log("\U0001f4c2 读档成功!")
         self._show_toast("读档成功!")
 
@@ -1516,7 +1620,7 @@ class HeroWorkshopApp:
                             ], alignment=ft.MainAxisAlignment.CENTER, spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                             border=ft.Border.all(1, rc),
                             border_radius=6,
-                            padding=ft.padding.symmetric(horizontal=4, vertical=3),
+                            padding=ft.Padding.symmetric(horizontal=4, vertical=3),
                             bgcolor="#fafafa",
                         ))
                     else:

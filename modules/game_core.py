@@ -1265,3 +1265,73 @@ class GameCore:
         """酒馆状态反序列化"""
         self.tavern_roster = tavern_roster_from_dict(data.get('roster', []))
         self.tavern_last_refresh = data.get('last_refresh', time.time())
+
+    def to_dict(self):
+        """序列化全部游戏状态为字典"""
+        return {
+            "resources": self.resources,
+            "buildings": self.buildings,
+            "building_levels": self.building_levels,
+            "building_workers": self.building_workers,
+            "player": self.player.to_dict(),
+            "current_map": self.current_map,
+            "unlocked_maps": list(self.unlocked_maps),
+            "current_enemy_idx": self.current_enemy_idx,
+            "wonders": list(self.wonders.keys()),
+            "plants": self.plants,
+            "factory": self.factory,
+            "factory_departments": self.factory_departments,
+            "factory_workers": self.factory_workers,
+            "factory_last_profit_time": getattr(self, "factory_last_profit_time", 0),
+            "auto_potion_threshold": self.auto_potion_threshold,
+            "team": self.team_to_dict(),
+            "tavern": self.tavern_to_dict(),
+            "codex": self.codex.to_dict(),
+            "ranch": self.ranch.to_dict(),
+            "current_member_idx": self.current_member_idx,
+            "mutated_plants": self.mutated_plants,
+        }
+
+    def from_dict(self, data):
+        """从字典恢复全部游戏状态"""
+        self.resources = data.get("resources", {})
+        self.buildings = data.get("buildings", {})
+        self.building_levels = data.get("building_levels", {})
+        self.building_workers = data.get("building_workers", {})
+        self.player.from_dict(data.get("player", {}))
+        self.current_map = data.get("current_map", "傲来国")
+        self.unlocked_maps = set(data.get("unlocked_maps", ["傲来国"]))
+        self.current_enemy_idx = data.get("current_enemy_idx", 0)
+        self.wonders = {n: True for n in data.get("wonders", [])}
+        self.plants = data.get("plants", [])
+        self.factory = data.get("factory")
+        self.factory_departments = data.get("factory_departments",
+                                            ["basic"] if data.get("factory") else [])
+        self.factory_workers = data.get("factory_workers", 0)
+        self.factory_last_profit_time = data.get("factory_last_profit_time", 0)
+        self.auto_potion_threshold = data.get("auto_potion_threshold", 0)
+        self.team_from_dict(data.get("team", []))
+        self.tavern_from_dict(data.get("tavern", []))
+        self.codex.from_dict(data.get("codex", {}))
+        self.ranch.from_dict(data.get("ranch", {}))
+        self.current_member_idx = data.get("current_member_idx", 0)
+        self.mutated_plants = data.get("mutated_plants", {})
+        # 重启建筑生产线程
+        for name, levels in self.building_levels.items():
+            for idx in range(len(levels)):
+                self.start_building_production(name, idx)
+
+    def save_to_file(self, filepath):
+        """存档到 JSON 文件"""
+        import json
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(self.to_dict(), f, ensure_ascii=False, indent=2)
+
+    def load_from_file(self, filepath):
+        """从 JSON 文件读档"""
+        import os, json
+        if not os.path.exists(filepath):
+            return False
+        with open(filepath, "r", encoding="utf-8") as f:
+            self.from_dict(json.load(f))
+        return True
