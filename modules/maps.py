@@ -74,7 +74,7 @@ MAPS = {
         "min_level": 45,
         "enemies": ["熊罴", "鸟精", "虎先锋", "山神"],
         "bosses": ["黄风大圣"],
-        "unlock_cost": 50000,
+        "unlock_cost": 35000,
     },
     "万寿山": {
         "name": "万寿山",
@@ -82,7 +82,7 @@ MAPS = {
         "min_level": 55,
         "enemies": ["人参娃娃", "五庄道童", "骷髅怪"],
         "bosses": ["镇元大仙"],
-        "unlock_cost": 100000,
+        "unlock_cost": 60000,
     },
 }
 
