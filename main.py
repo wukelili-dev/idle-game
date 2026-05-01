@@ -21,6 +21,7 @@ from modules.maps import get_all_maps, get_random_enemy, get_all_enemies
 from modules.inventory import NOVELTY_ITEMS, NOVELTY_RARITY_COLORS, NOVELTY_RARITY_NAMES
 from modules.plants import get_plant_catalog, get_plant_by_id, PLANT_RARITY_COLORS, PLANT_RARITY_NAMES
 from modules.ranch import RANCH_CATALOG
+from modules.ranch_manager import RARITY_PRICE
 from modules.forge import (FORGE_RECIPES, FORTIFY_CONFIG, PROTECT_CHARM_COST,
                             FORGE_RARITY_COLORS, get_all_forge_recipes,
                             get_fortify_info, get_forge_recipes_by_rarity)
@@ -31,7 +32,7 @@ from modules.codex import CODEX_BOOKS
 SAVE_PATH = "D:\\pyproject\\hero_workshop\\save.json"
 I = ft.icons.Icons  # Flet 0.84: icons are at ft.icons.Icons.XXX
 RARITY_COLORS = ["#cccccc", "#4FC3F7", "#BA68C8", "#FFA726", "#EF5350"]
-RANCH_RARITY_COLORS = {1: "#4caf50", 2: "#2196f3", 3: "#9c27b0", 4: "#ff9800", 5: "#f44336"}
+RANCH_RARITY_COLORS = {0: "#9e9e9e", 1: "#4caf50", 2: "#2196f3", 3: "#9c27b0", 4: "#ff9800"}
 MONSTER_RARITY_COLORS = {1: "#4caf50", 2: "#2196f3", 3: "#9c27b0", 4: "#ff9800", 5: "#f44336"}
 
 # ═══════════════ 视觉常量 ═══════════════
@@ -1026,8 +1027,7 @@ class HeroWorkshopApp:
         ], spacing=2)
         self._ref("ranch_shop_ctr", shop_ctr)
         for creature in RANCH_CATALOG:
-            ridx = min(creature.get("rarity", 1) - 1, 4)
-            rcolor = RANCH_RARITY_COLORS.get(creature.get("rarity", 1), "#888888")
+            rcolor = RANCH_RARITY_COLORS.get(creature.get("rarity", 0), "#888888")
             price = creature.get("price", 0)
             feed = creature.get("feed_cost", 0)
             pers = creature.get("personality", "")
@@ -1040,8 +1040,8 @@ class HeroWorkshopApp:
                                   size=12, color=rcolor, weight=ft.FontWeight.BOLD),
                     subtitle=ft.Text(f"{creature.get('rarity_name','')} · 售价{price}G · 饲料{feed}G/次 · {pers}",
                                     size=10),
-                    trailing=ft.Button("购买", scale=0.75,
-                                       on_click=lambda e, c=creature: self.game.buy_ranch_creature(c["id"])),
+                    trailing=self._ref(f"ranch_buy_{creature['id']}", ft.Button("购买", scale=0.75,
+                                       on_click=lambda e, c=creature: self.game.buy_ranch_creature(c["id"]))),
                 )
             )
 
@@ -1059,11 +1059,11 @@ class HeroWorkshopApp:
                 ft.Container(expand=True),
                 self._ref("ranch_gold_lbl", ft.Text("\U0001fa99 100G", size=F_MD, color=CLR_ACCENT)),
             ], spacing=8), padding=8),
-            styled_card(ft.Container(content=self._refs["ranch_inventory_ctr"], height=200), padding=6),
+            styled_card(ft.Container(content=self._refs["ranch_inventory_ctr"], height=180), padding=6),
             ft.Text("产出仓库", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
             styled_card(self._refs["ranch_warehouse_ctr"], padding=6, expand=True),
             ft.Text("生物商店", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
-            styled_card(ft.ListView([shop_ctr], spacing=2, expand=True), padding=6, expand=True),
+            styled_card(shop_ctr, padding=6, expand=True),
         ], scroll="auto", spacing=6)
         return ft.Container(content=ctr)
 
@@ -1633,15 +1633,28 @@ class HeroWorkshopApp:
         rg_lbl = self._refs.get("ranch_gold_lbl")
         if rg_lbl:
             rg_lbl.value = f"\U0001fa99 {g.player.gold}"
+        # 刷新商店购买按钮状态
+        for creature in RANCH_CATALOG:
+            btn = self._refs.get(f"ranch_buy_{creature['id']}")
+            if btn:
+                btn.disabled = g.player.gold < creature.get("price", 0)
         wh_ctr = self._refs.get("ranch_warehouse_ctr")
         if wh_ctr:
             wh_ctr.controls.clear()
             wh = g.ranch.get_warehouse_summary()
             for otype, count in wh.items():
                 if count > 0:
+                    # 从 RANCH_CATALOG 查找 output_type 对应的 rarity
+                    rarity = 0
+                    for c in RANCH_CATALOG:
+                        if c.get("output_type") == otype:
+                            rarity = c.get("rarity", 0)
+                            break
+                    unit_price = RARITY_PRICE.get(rarity, 1)
                     wh_ctr.controls.append(ft.Container(
                         content=ft.Row([
-                            ft.Text(f"{otype} x{count}", size=12, expand=True),
+                            ft.Text(f"{otype} x{count} ({unit_price}G/个)", size=12, expand=True),
+                            ft.Button("全部", scale=0.7, on_click=lambda e, ot=otype, cnt=count: self.game.sell_ranch_output(ot, cnt)),
                             ft.Button("售出", scale=0.7, on_click=lambda e, ot=otype: self.game.sell_ranch_output(ot, 1)),
                         ], tight=True),
                         padding=4, border=ft.Border.all(1, Cs("OUTLINE_VARIANT")), border_radius=4,
