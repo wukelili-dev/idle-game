@@ -1081,9 +1081,9 @@ class HeroWorkshopApp:
         self._ref("fortify_dd", ft.Dropdown(
             options=equip_opts,
             hint_text="选择要强化的装备",
-            on_change=self._on_fortify_select,
             expand=True,
         ))
+        self._refs["fortify_dd"].on_change = self._on_fortify_select
 
         fortify_ctr = styled_card(ft.Column([
             ft.Text("【强化装备】", size=F_MD, weight=ft.FontWeight.BOLD, color="#37474F"),
