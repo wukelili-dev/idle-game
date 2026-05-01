@@ -161,7 +161,6 @@ class GameCore:
         """每帧更新植物状态（结算产金、移除枯萎成年植物）"""
         now = time.time()
         changed = False
-        to_remove = []
 
         for plant in self.plants:
             pd = get_plant_by_id(plant["plant_id"])
@@ -196,15 +195,6 @@ class GameCore:
                     self.add_log(f"🌾 {pd['icon']} {pd['name']} 产出 {feed_type}×{gain}")
                     plant["feed_count"] = current_feeds
                     changed = True
-
-                # 枯萎检测
-                if adult_elapsed >= pd["adult_lifespan_s"]:
-                    self.add_log(f"🥀 {pd['name']} 枯萎了")
-                    to_remove.append(plant["id"])
-                    changed = True
-
-        for pid in to_remove:
-            self.plants = [p for p in self.plants if p["id"] != pid]
 
         return changed
 
